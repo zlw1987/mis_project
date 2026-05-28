@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MIS Project Requests{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .navbar { background: #2c3e50; color: #fff; padding: 15px 20px; margin-bottom: 20px; }
+        .navbar a { color: #fff; text-decoration: none; margin-right: 15px; }
+        .navbar a:hover { text-decoration: underline; }
+        .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 20px; margin-bottom: 15px; }
+        .btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; }
+        .btn-primary { background: #3498db; color: #fff; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #27ae60; color: #fff; }
+        .btn-success:hover { background: #219a52; }
+        .btn-warning { background: #f39c12; color: #fff; }
+        .btn-warning:hover { background: #e67e22; }
+        .btn-secondary { background: #95a5a6; color: #fff; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .form-control { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .alert { padding: 12px 15px; border-radius: 4px; margin-bottom: 15px; }
+        .alert-error { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6cb; }
+        .alert-success { background: #e8fde8; color: #27ae60; border: 1px solid #c3e6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; }
+        .badge-draft { background: #95a5a6; color: #fff; }
+        .badge-submitted { background: #3498db; color: #fff; }
+        .badge-reviewing { background: #9b59b6; color: #fff; }
+        .badge-approved { background: #27ae60; color: #fff; }
+        .badge-rejected { background: #e74c3c; color: #fff; }
+        .badge-assigned { background: #f39c12; color: #fff; }
+        .badge-in_progress { background: #1abc9c; color: #fff; }
+        .badge-on_hold { background: #e67e22; color: #fff; }
+        .badge-completed { background: #2ecc71; color: #fff; }
+        .badge-cancelled { background: #34495e; color: #fff; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .filters input, .filters select { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        .section-title { font-size: 18px; font-weight: 600; margin: 20px 0 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .meta { color: #666; font-size: 13px; }
+        .actions { margin-top: 10px; }
+        .actions .btn { margin-right: 5px; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        {% if user.is_authenticated %}
+            <a href="{% url 'project_requests:dashboard' %}">Dashboard</a>
+        {% endif %}
+        <a href="{% url 'project_requests:list' %}">Project Requests</a>
+        {% if user.is_authenticated %}
+            <a href="{% url 'project_requests:create' %}">New Request</a>
+            <span>Welcome, {{ user.display_name|default:user.username }}</span>
+        {% endif %}
+    </nav>
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

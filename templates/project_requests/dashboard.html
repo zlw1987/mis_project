@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Project Requests{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 20px;">Dashboard</h1>
+
+<!-- My Drafts -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ my_drafts.title }}</h2>
+        <span class="badge badge-draft">{{ my_drafts.count }}</span>
+    </div>
+    {% if my_drafts.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Created</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in my_drafts.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no|default:"(Draft)" }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.created_at|date:"Y-m-d" }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ my_drafts.empty_state }}</p>
+    {% endif %}
+</div>
+
+<!-- My Open Requests -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ my_open_requests.title }}</h2>
+        <span class="badge badge-submitted">{{ my_open_requests.count }}</span>
+    </div>
+    {% if my_open_requests.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Project Dept</th>
+                <th>Status</th>
+                <th>Needed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in my_open_requests.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.project_department.dept_name|default:"—" }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ my_open_requests.empty_state }}</p>
+    {% endif %}
+</div>
+
+<!-- My Pending Approval Tasks -->
+{% if my_pending_approval_tasks.count > 0 or user.is_superuser %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ my_pending_approval_tasks.title }}</h2>
+        <span class="badge badge-reviewing">{{ my_pending_approval_tasks.count }}</span>
+    </div>
+    {% if my_pending_approval_tasks.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in my_pending_approval_tasks.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' task.project_request.pk %}">{{ task.project_request.request_no|default:"(Draft)" }}</a></td>
+                <td>{{ task.get_role_display }}</td>
+                <td>{{ task.department.dept_name }}</td>
+                <td><span class="badge badge-{{ task.status|lower }}">{{ task.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ my_pending_approval_tasks.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- My Assigned Requests -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ my_assigned_requests.title }}</h2>
+        <span class="badge badge-assigned">{{ my_assigned_requests.count }}</span>
+    </div>
+    {% if my_assigned_requests.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Needed By</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in my_assigned_requests.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ my_assigned_requests.empty_state }}</p>
+    {% endif %}
+</div>
+
+<!-- My Overdue Requests -->
+{% if my_overdue_requests.count > 0 %}
+<div class="card" style="border-left: 4px solid #e74c3c;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ my_overdue_requests.title }}</h2>
+        <span class="badge badge-rejected">{{ my_overdue_requests.count }}</span>
+    </div>
+    {% if my_overdue_requests.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Needed By</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in my_overdue_requests.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td style="color: #e74c3c;">{{ pr.needed_by_date }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ my_overdue_requests.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Claimable Requests -->
+{% if claimable_requests.count > 0 %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ claimable_requests.title }}</h2>
+        <span class="badge badge-approved">{{ claimable_requests.count }}</span>
+    </div>
+    {% if claimable_requests.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Project Dept</th>
+                <th>Needed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in claimable_requests.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.project_department.dept_name|default:"—" }}</td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ claimable_requests.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Project Dept Queue -->
+{% if project_dept_queue.count > 0 %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ project_dept_queue.title }}</h2>
+        <span class="badge badge-submitted">{{ project_dept_queue.count }}</span>
+    </div>
+    {% if project_dept_queue.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Requester</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Needed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in project_dept_queue.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.requester.display_name|default:pr.requester.username }}</td>
+                <td>{{ pr.get_priority_display|default:"—" }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ project_dept_queue.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- In Progress / On Hold -->
+{% if in_progress_or_on_hold.count > 0 %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ in_progress_or_on_hold.title }}</h2>
+        <span class="badge badge-in_progress">{{ in_progress_or_on_hold.count }}</span>
+    </div>
+    {% if in_progress_or_on_hold.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Requester</th>
+                <th>Status</th>
+                <th>Needed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in in_progress_or_on_hold.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.requester.display_name|default:pr.requester.username }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ in_progress_or_on_hold.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Recently Completed -->
+{% if recently_completed.count > 0 %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ recently_completed.title }}</h2>
+        <span class="badge badge-completed">{{ recently_completed.count }}</span>
+    </div>
+    {% if recently_completed.items %}
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Requester</th>
+                <th>Completed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in recently_completed.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a></td>
+                <td>{{ pr.project_name|default:"(No name)" }}</td>
+                <td>{{ pr.requester.display_name|default:pr.requester.username }}</td>
+                <td>{{ pr.completed_at|date:"Y-m-d"|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; margin-top: 10px;">{{ recently_completed.empty_state }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Admin Overview (Superuser Only) -->
+{% if admin_overview %}
+<div class="card" style="background: #f8f9fa;">
+    <h2 style="font-size: 16px; margin: 0 0 10px 0;">{{ admin_overview.title }}</h2>
+
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;">
+        <div style="flex: 1; min-width: 150px; padding: 10px; background: white; border-radius: 4px; text-align: center;">
+            <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">{{ admin_overview.overdue_count }}</div>
+            <div style="font-size: 12px; color: #666;">My Overdue</div>
+        </div>
+    </div>
+
+    <h3 style="font-size: 14px; margin: 15px 0 10px;">Status Breakdown</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        {% for item in admin_overview.status_counts %}
+        <div style="padding: 5px 10px; background: white; border-radius: 4px;">
+            <span class="badge badge-{{ item.status|lower }}" style="margin-right: 5px;">{{ item.status }}</span>
+            <strong>{{ item.count }}</strong>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- All Pending Approvals (Superuser Only) -->
+{% if all_pending_approvals.items %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 16px; margin: 0;">{{ all_pending_approvals.title }}</h2>
+        <span class="badge badge-reviewing">{{ all_pending_approvals.count }}</span>
+    </div>
+    <table style="margin-top: 10px;">
+        <thead>
+            <tr>
+                <th>Request</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in all_pending_approvals.items %}
+            <tr>
+                <td><a href="{% url 'project_requests:detail' task.project_request.pk %}">{{ task.project_request.request_no|default:"(Draft)" }}</a></td>
+                <td>{{ task.get_role_display }}</td>
+                <td>{{ task.department.dept_name }}</td>
+                <td><span class="badge badge-{{ task.status|lower }}">{{ task.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endif %}
+
+{% endblock %}

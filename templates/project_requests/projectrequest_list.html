@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Project Requests{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <h1>Project Requests</h1>
+    <a href="{% url 'project_requests:create' %}" class="btn btn-primary">New Request</a>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <form method="get" class="filters">
+        <select name="status">
+            <option value="">All Statuses</option>
+            {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="request_type">
+            <option value="">All Types</option>
+            {% for id, name in request_type_choices %}
+                <option value="{{ id }}" {% if current_filters.request_type == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
+        <select name="priority">
+            <option value="">All Priorities</option>
+            {% for value, label in priority_choices %}
+                <option value="{{ value }}" {% if current_filters.priority == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="project_department">
+            <option value="">All Departments</option>
+            {% for id, name in project_department_choices %}
+                <option value="{{ id }}" {% if current_filters.project_department == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="search" placeholder="Search by # or name" value="{{ current_filters.search }}">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{% url 'project_requests:list' %}" class="btn btn-secondary">Clear</a>
+    </form>
+</div>
+
+<!-- List -->
+<div class="card">
+    {% if project_requests %}
+    <table>
+        <thead>
+            <tr>
+                <th>Request No</th>
+                <th>Project Name</th>
+                <th>Requester</th>
+                <th>Request Dept</th>
+                <th>Project Dept</th>
+                <th>Type</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Needed By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr in project_requests %}
+            <tr>
+                <td>
+                    <a href="{% url 'project_requests:detail' pr.pk %}">{{ pr.request_no }}</a>
+                </td>
+                <td>{{ pr.project_name|default:"(Draft)" }}</td>
+                <td>{{ pr.requester.display_name|default:pr.requester.username }}</td>
+                <td>{{ pr.request_department.dept_name }}</td>
+                <td>{{ pr.project_department.dept_name|default:"—" }}</td>
+                <td>{{ pr.request_type.name|default:"—" }}</td>
+                <td>{{ pr.get_priority_display|default:"—" }}</td>
+                <td><span class="badge badge-{{ pr.status }}">{{ pr.get_status_display }}</span></td>
+                <td>{{ pr.needed_by_date|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
+        {% if page_obj.has_previous %}
+            <a href="?{{ request.GET.urlencode }}&page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?{{ request.GET.urlencode }}&page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p>No project requests found.</p>
+    {% endif %}
+</div>
+{% endblock %}

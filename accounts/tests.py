@@ -182,25 +182,27 @@ class DepartmentRoleHelpersTest(TestCase):
         self.assertTrue(is_staff_in_department(self.user, self.dept_mis))
         self.assertFalse(is_staff_in_department(self.user, self.dept_it))
 
-    # Fix 4 — helper return naming
-    def test_get_user_departments_returns_active_departments(self):
+    # Fix 4 — helper return naming (now returns Department objects, not IDs)
+    def test_get_user_departments_returns_department_objects(self):
         UserDepartment.objects.create(user=self.user, department=self.dept_mis, is_active=True)
         UserDepartment.objects.create(user=self.user, department=self.dept_it, is_active=False)
         depts = list(get_user_departments(self.user))
         self.assertEqual(len(depts), 1)
-        self.assertEqual(depts[0], self.dept_mis.id)
+        self.assertIsInstance(depts[0], Department)
+        self.assertEqual(depts[0], self.dept_mis)
 
     def test_get_user_department_ids_returns_active_ids(self):
         UserDepartment.objects.create(user=self.user, department=self.dept_mis, is_active=True)
         ids = list(get_user_department_ids(self.user))
         self.assertEqual(ids, [self.dept_mis.id])
 
-    def test_get_user_managed_departments_returns_manager_and_above(self):
+    def test_get_user_managed_departments_returns_department_objects(self):
         UserDepartment.objects.create(user=self.user, department=self.dept_mis, access_level=AccessLevel.STAFF)
         UserDepartment.objects.create(user=self.user, department=self.dept_it, access_level=AccessLevel.MANAGER)
         managed = list(get_user_managed_departments(self.user))
         self.assertEqual(len(managed), 1)
-        self.assertEqual(managed[0], self.dept_it.id)
+        self.assertIsInstance(managed[0], Department)
+        self.assertEqual(managed[0], self.dept_it)
 
     def test_get_user_managed_department_ids_returns_ids(self):
         UserDepartment.objects.create(user=self.user, department=self.dept_it, access_level=AccessLevel.MANAGER)

@@ -3,7 +3,7 @@
 All role checks are department-specific through UserDepartment.
 Do NOT use a global user.access_level field.
 """
-from .models import AccessLevel
+from .models import AccessLevel, Department
 
 
 # ---------------------------------------------------------------------------
@@ -45,27 +45,31 @@ def is_vp_or_above(user, department):
 
 def get_user_departments(user):
     """Return Department queryset of all active departments for a user."""
-    return getattr(user, 'user_departments').filter(
-        is_active=True
-    ).values_list('department', flat=True)
+    return Department.objects.filter(
+        user_departments__user=user,
+        user_departments__is_active=True,
+    ).distinct()
 
 
 def get_user_department_ids(user):
-    """Return active department IDs for a user (alias for clarity)."""
-    return get_user_departments(user)
+    """Return active department IDs for a user."""
+    return get_user_departments(user).values_list("id", flat=True)
 
 
 def get_user_managed_departments(user):
     """Return Department queryset where user is MANAGER or above."""
-    return getattr(user, 'user_departments').filter(
-        is_active=True,
-        access_level__in=[AccessLevel.MANAGER, AccessLevel.DIRECTOR, AccessLevel.VP]
-    ).values_list('department', flat=True)
+    return Department.objects.filter(
+        user_departments__user=user,
+        user_departments__is_active=True,
+        user_departments__access_level__in=[
+            AccessLevel.MANAGER, AccessLevel.DIRECTOR, AccessLevel.VP,
+        ],
+    ).distinct()
 
 
 def get_user_managed_department_ids(user):
-    """Return active managed department IDs for a user (alias for clarity)."""
-    return get_user_managed_departments(user)
+    """Return active managed department IDs for a user."""
+    return get_user_managed_departments(user).values_list("id", flat=True)
 
 
 # ---------------------------------------------------------------------------

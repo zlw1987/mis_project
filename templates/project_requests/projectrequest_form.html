@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if project_request.request_no %}{{ project_request.request_no }}{% else %}New Request{% endif %} — Project Request Form{% endblock %}
+
+{% block content %}
+<h1>{% if object %}Edit Draft{% else %}New Project Request{% endif %}</h1>
+
+<div class="card" style="max-width: 800px;">
+    {% if form.non_field_errors %}
+        <div class="alert alert-error">
+            {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="{{ form.project_name.id_for_label }}">Project Name</label>
+            {{ form.project_name }}
+            {% if form.project_name.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.project_name.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.request_department.id_for_label }}">Request Department</label>
+            {{ form.request_department }}
+            {% if form.request_department.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.request_department.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.project_department.id_for_label }}">Project Department (Delivery)</label>
+            {{ form.project_department }}
+            {% if form.project_department.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.project_department.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.request_type.id_for_label }}">Request Type</label>
+            {{ form.request_type }}
+            {% if form.request_type.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.request_type.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.priority.id_for_label }}">Priority</label>
+            {{ form.priority }}
+            {% if form.priority.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.priority.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.needed_by_date.id_for_label }}">Needed By Date</label>
+            {{ form.needed_by_date }}
+            {% if form.needed_by_date.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.needed_by_date.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.scope_summary.id_for_label }}">Scope Summary</label>
+            {{ form.scope_summary }}
+            {% if form.scope_summary.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.scope_summary.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.business_problem.id_for_label }}">Business Problem</label>
+            {{ form.business_problem }}
+            {% if form.business_problem.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.business_problem.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.business_scope.id_for_label }}">Business Scope</label>
+            {{ form.business_scope }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.technical_scope.id_for_label }}">Technical Scope</label>
+            {{ form.technical_scope }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.in_scope.id_for_label }}">In Scope</label>
+            {{ form.in_scope }}
+            {% if form.in_scope.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.in_scope.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.out_of_scope.id_for_label }}">Out of Scope</label>
+            {{ form.out_of_scope }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.expected_deliverables.id_for_label }}">Expected Deliverables</label>
+            {{ form.expected_deliverables }}
+            {% if form.expected_deliverables.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.expected_deliverables.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.acceptance_criteria.id_for_label }}">Acceptance Criteria</label>
+            {{ form.acceptance_criteria }}
+            {% if form.acceptance_criteria.errors %}
+                <div class="alert alert-error" style="margin-top:5px; padding:5px;">{{ form.acceptance_criteria.errors.0 }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.affected_systems.id_for_label }}">Affected Systems</label>
+            {{ form.affected_systems }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.customer.id_for_label }}">Customer</label>
+            {{ form.customer }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.etd.id_for_label }}">ETD</label>
+            {{ form.etd }}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.hours_estimate.id_for_label }}">Hours Estimate</label>
+            {{ form.hours_estimate }}
+        </div>
+
+        <div class="actions">
+            <button type="submit" name="save_draft" value="1" class="btn btn-secondary">Save Draft</button>
+            {% if can_submit_draft|default:true %}
+                <button type="submit" name="submit" value="1" class="btn btn-success">Submit Request</button>
+            {% endif %}
+            <a href="{% url 'project_requests:list' %}" class="btn btn-secondary">Cancel</a>
+            {% if object %}
+                <a href="{% url 'project_requests:detail' object.pk %}" class="btn btn-secondary">Back to Detail</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}

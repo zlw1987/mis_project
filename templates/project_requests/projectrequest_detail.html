@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project_request.request_no|default:"Draft" }} — {{ project_request.project_name|default:"Project Request" }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <h1>{{ project_request.request_no|default:"Draft" }}</h1>
+    <div>
+        {% if can_edit_draft %}
+            <a href="{% url 'project_requests:edit' project_request.pk %}" class="btn btn-warning">Edit Draft</a>
+        {% endif %}
+        <a href="{% url 'project_requests:list' %}" class="btn btn-secondary">Back to List</a>
+    </div>
+</div>
+
+<!-- Main Info -->
+<div class="card">
+    <h2>{{ project_request.project_name|default:"(No project name)" }}</h2>
+    <p><span class="badge badge-{{ project_request.status }}">{{ project_request.get_status_display }}</span></p>
+
+    <table style="margin-top: 15px;">
+        <tr><td><strong>Request No</strong></td><td>{{ project_request.request_no|default:"—" }}</td></tr>
+        <tr><td><strong>Requester</strong></td><td>{{ project_request.requester.display_name|default:project_request.requester.username }}</td></tr>
+        <tr><td><strong>Request Department</strong></td><td>{{ project_request.request_department.dept_name }}</td></tr>
+        <tr><td><strong>Project Department</strong></td><td>{{ project_request.project_department.dept_name|default:"—" }}</td></tr>
+        <tr><td><strong>Request Type</strong></td><td>{{ project_request.request_type.name|default:"—" }}</td></tr>
+        <tr><td><strong>Priority</strong></td><td>{{ project_request.get_priority_display|default:"—" }}</td></tr>
+        <tr><td><strong>Needed By</strong></td><td>{{ project_request.needed_by_date|default:"—" }}</td></tr>
+        <tr><td><strong>Customer</strong></td><td>{{ project_request.customer|default:"—" }}</td></tr>
+        <tr><td><strong>ETD</strong></td><td>{{ project_request.etd|default:"—" }}</td></tr>
+        <tr><td><strong>Hours Estimate</strong></td><td>{{ project_request.hours_estimate|default:"—" }}</td></tr>
+        <tr><td><strong>Created</strong></td><td>{{ project_request.created_at }}</td></tr>
+        <tr><td><strong>Submitted</strong></td><td>{{ project_request.submitted_at|default:"—" }}</td></tr>
+        <tr><td><strong>Approved</strong></td><td>{{ project_request.approved_at|default:"—" }}</td></tr>
+    </table>
+
+    {% if project_request.scope_summary %}
+    <p class="section-title">Scope Summary</p>
+    <p>{{ project_request.scope_summary|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.business_problem %}
+    <p class="section-title">Business Problem</p>
+    <p>{{ project_request.business_problem|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.business_scope %}
+    <p class="section-title">Business Scope</p>
+    <p>{{ project_request.business_scope|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.technical_scope %}
+    <p class="section-title">Technical Scope</p>
+    <p>{{ project_request.technical_scope|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.in_scope %}
+    <p class="section-title">In Scope</p>
+    <p>{{ project_request.in_scope|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.out_of_scope %}
+    <p class="section-title">Out of Scope</p>
+    <p>{{ project_request.out_of_scope|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.expected_deliverables %}
+    <p class="section-title">Expected Deliverables</p>
+    <p>{{ project_request.expected_deliverables|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.acceptance_criteria %}
+    <p class="section-title">Acceptance Criteria</p>
+    <p>{{ project_request.acceptance_criteria|linebreaks }}</p>
+    {% endif %}
+
+    {% if project_request.affected_systems %}
+    <p class="section-title">Affected Systems</p>
+    <p>{{ project_request.affected_systems|linebreaks }}</p>
+    {% endif %}
+</div>
+
+<!-- Approval Tasks -->
+{% if approval_tasks %}
+<div class="card">
+    <p class="section-title">Approval Tasks</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Acted By</th>
+                <th>Acted At</th>
+                <th>Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in approval_tasks %}
+            <tr>
+                <td>{{ task.get_role_display }}</td>
+                <td>{{ task.department.dept_name }}</td>
+                <td><span class="badge badge-{{ task.status|lower }}">{{ task.get_status_display }}</span></td>
+                <td>{% if task.acted_by %}{{ task.acted_by.display_name|default:task.acted_by.username }}{% else %}—{% endif %}</td>
+                <td>{{ task.acted_at|default:"—" }}</td>
+                <td>{{ task.decision_comment|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Phase 3D-1: Approval Action Controls -->
+{% if action_context.can_approve_any_task or action_context.can_reject_any_task %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Your Approval Tasks</p>
+    {% for task in action_context.pending_approval_tasks_user_can_act_on %}
+    <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        <p><strong>{{ task.get_role_display }}</strong> — {{ task.department.dept_name }}</p>
+
+        <!-- Approve Form -->
+        <form method="post" action="{% url 'project_requests:approve' project_request.pk %}" style="display: inline-block; margin-right: 10px;">
+            {% csrf_token %}
+            <input type="hidden" name="approval_task_id" value="{{ task.pk }}">
+            <textarea name="comment" class="form-control" rows="2" placeholder="Optional comment" style="margin-bottom: 5px;"></textarea>
+            <button type="submit" class="btn btn-success btn-sm">Approve</button>
+        </form>
+
+        <!-- Reject Form -->
+        <form method="post" action="{% url 'project_requests:reject' project_request.pk %}" style="display: inline-block;">
+            {% csrf_token %}
+            <input type="hidden" name="approval_task_id" value="{{ task.pk }}">
+            <textarea name="comment" class="form-control" rows="2" placeholder="Required rejection reason" style="margin-bottom: 5px;" required></textarea>
+            <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Phase 3D-2: Assignment Form -->
+{% if action_context.can_assign and assignment_form %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Assign Request</p>
+    <form method="post" action="{% url 'project_requests:assign' project_request.pk %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+            <label for="id_assigned_to">Assign To</label>
+            {{ assignment_form.assigned_to }}
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label for="id_comment">Comment (optional)</label>
+            {{ assignment_form.comment }}
+        </div>
+        <button type="submit" class="btn btn-primary">Assign</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Phase 3D-2: Claim Button -->
+{% if action_context.can_claim %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Claim This Request</p>
+    <form method="post" action="{% url 'project_requests:claim' project_request.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success">Claim This Request</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Phase 3D-3: Execution Workflow Controls -->
+{% if action_context.can_start %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Start Execution</p>
+    <form method="post" action="{% url 'project_requests:start' project_request.pk %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+            <label for="id_start_comment">Comment (optional)</label>
+            <textarea name="comment" id="id_start_comment" class="form-control" rows="2" placeholder="Optional comment"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Start</button>
+    </form>
+</div>
+{% endif %}
+
+{% if action_context.can_hold %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Put On Hold</p>
+    <form method="post" action="{% url 'project_requests:hold' project_request.pk %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+            <label for="id_hold_comment">Hold Reason (required)</label>
+            <textarea name="comment" id="id_hold_comment" class="form-control" rows="3" placeholder="Why is this request being put on hold?" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-warning">Put on Hold</button>
+    </form>
+</div>
+{% endif %}
+
+{% if action_context.can_resume %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Resume Execution</p>
+    <form method="post" action="{% url 'project_requests:resume' project_request.pk %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+            <label for="id_resume_comment">Comment (optional)</label>
+            <textarea name="comment" id="id_resume_comment" class="form-control" rows="2" placeholder="Optional comment"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Resume</button>
+    </form>
+</div>
+{% endif %}
+
+{% if action_context.can_complete %}
+<div class="card" style="margin-bottom: 15px;">
+    <p class="section-title">Complete Execution</p>
+    <form method="post" action="{% url 'project_requests:complete' project_request.pk %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+            <label for="id_complete_comment">Comment (optional)</label>
+            <textarea name="comment" id="id_complete_comment" class="form-control" rows="2" placeholder="Optional comment"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Mark Complete</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Assignments -->
+{% if assignments %}
+<div class="card">
+    <p class="section-title">Assignments</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Assigned To</th>
+                <th>Assigned By</th>
+                <th>Role</th>
+                <th>Assigned At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for assignment in assignments %}
+            <tr>
+                <td>{{ assignment.assigned_to.display_name|default:assignment.assigned_to.username }}</td>
+                <td>{{ assignment.assigned_by.display_name|default:assignment.assigned_by.username }}</td>
+                <td>{{ assignment.role|default:"—" }}</td>
+                <td>{{ assignment.assigned_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Attachments -->
+<div class="card" id="upload-section">
+    <p class="section-title">Attachments</p>
+
+    {% if attachment_upload_error %}
+        <div class="alert alert-error">{{ attachment_upload_error }}</div>
+    {% endif %}
+
+    {% if action_context.can_attach_file %}
+    <form method="post" action="{% url 'project_requests:attachment_upload' project_request.pk %}" enctype="multipart/form-data" style="margin-bottom: 15px;">
+        {% csrf_token %}
+        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="id_file">File</label>
+                <input type="file" name="file" id="id_file" required>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="id_file_type">File Type</label>
+                <select name="file_type" id="id_file_type" required>
+                    <option value="">-- Select --</option>
+                    {% for ft in attachment_form.fields.file_type.queryset %}
+                        <option value="{{ ft.id }}">{{ ft.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="id_description">Description</label>
+                <input type="text" name="description" id="id_description" placeholder="Optional">
+            </div>
+            <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+        {% if attachment_form and attachment_form.errors %}
+            <div class="alert alert-error" style="margin-top: 5px;">
+                {% for field, errors in attachment_form.errors.items %}
+                    {{ field }}: {{ errors.0 }}<br>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </form>
+    {% endif %}
+
+    {% if attachments %}
+    <table>
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Uploaded By</th>
+                <th>Uploaded At</th>
+                <th>Size</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for attachment in attachments %}
+            <tr>
+                <td>{{ attachment.original_filename }}</td>
+                <td>{{ attachment.file_type.name }}</td>
+                <td>{{ attachment.description|default:"—" }}</td>
+                <td>{{ attachment.uploaded_by.display_name|default:attachment.uploaded_by.username }}</td>
+                <td>{{ attachment.uploaded_at }}</td>
+                <td>{{ attachment.file_size|filesizeformat }}</td>
+                <td>
+                    <a href="{% url 'project_requests:attachment_download' attachment.pk %}" class="btn btn-primary btn-sm">Download</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="meta">No attachments yet.</p>
+    {% endif %}
+</div>
+
+<!-- Activity Log -->
+{% if activity_logs %}
+<div class="card">
+    <p class="section-title">Activity Log</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Action</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Description</th>
+                <th>Actor</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in activity_logs %}
+            <tr>
+                <td>{{ log.get_action_type_display }}</td>
+                <td>{{ log.from_status|default:"—" }}</td>
+                <td>{{ log.to_status|default:"—" }}</td>
+                <td>{{ log.description }}</td>
+                <td>{% if log.actor %}{{ log.actor.display_name|default:log.actor.username }}{% else %}—{% endif %}</td>
+                <td>{{ log.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Action Buttons (Phase 2B supported actions only) -->
+<div class="card">
+    <p class="section-title">Actions</p>
+    <div class="actions">
+        {% if can_edit_draft %}
+            <a href="{% url 'project_requests:edit' project_request.pk %}" class="btn btn-warning">Edit Draft</a>
+        {% endif %}
+        {% if can_submit_draft %}
+            <a href="{% url 'project_requests:edit' project_request.pk %}" class="btn btn-success">Edit & Submit</a>
+        {% endif %}
+        {% if action_context.can_attach_file %}
+            <a href="#upload-section" class="btn btn-primary">Upload Attachment</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

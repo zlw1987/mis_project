@@ -150,7 +150,7 @@ class ProjectRequest(models.Model):
 
     request_no = models.CharField(
         max_length=30, unique=True, null=True, blank=True,
-        help_text="Auto-generated request number (e.g. PR-2026-0001)",
+        help_text="Auto-generated request number, e.g. PRJ-2026-000001",
     )
     project_name = models.CharField(max_length=255, blank=True, default="")
     requester = models.ForeignKey(

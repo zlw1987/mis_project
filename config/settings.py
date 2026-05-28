@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     # Local apps
     'accounts',
     'project_requests',
+    'external_auth',
 ]
 
 MIDDLEWARE = [
@@ -131,3 +132,49 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
+
+# -----------------------------------------------------------------------------
+# FoxPro External Authentication Settings (Phase 4F)
+# -----------------------------------------------------------------------------
+
+# Signature mode for FoxPro launch URL validation
+# Currently only 'legacy_v2' is supported for pilot
+# Any other value will cause launch to be rejected
+FOXPRO_SIGNATURE_MODE = 'legacy_v2'
+
+# Shared secret for FoxPro v2 signature algorithm
+# IMPORTANT: Generate a strong random secret and store securely
+# The secret should be at least 32 characters long
+# Replace with actual secret before pilot deployment
+FOXPRO_V2_SECRET = 'INTERNAL-SECRET-32PLUS'
+
+# Maximum age of launch timestamp in seconds (v2 pilot: 15 seconds)
+# This prevents replay attacks by rejecting stale URLs
+FOXPRO_LAUNCH_MAX_AGE_SECONDS = 15
+
+# Timezone for parsing FoxPro timestamp (d=YYYYMMDDHHMMSS)
+# FoxPro generates timestamps in local/server time
+# Parse as naive datetime in this timezone, then convert to aware datetime for comparison
+FOXPRO_LAUNCH_TIMEZONE = 'America/Los_Angeles'
+
+# IP allowlist for FoxPro launch requests
+# Uses CIDR notation for subnet ranges (e.g., '10.0.0.0/8' for internal network)
+# Empty list means no IP restriction (not recommended for production)
+# Current deployment runs from local workstations, so allow internal subnet
+FOXPRO_ALLOWED_IPS = [
+    '127.0.0.1',           # Localhost for testing
+    '::1',                 # IPv6 localhost for testing
+]
+
+# Whether to trust X-Forwarded-For header for client IP
+# If False (default), uses REMOTE_ADDR only (more secure for single-server setup)
+# If True, uses X-Forwarded-For (only use if behind a trusted proxy)
+FOXPRO_TRUST_X_FORWARDED_FOR = False
+
+# Allowed return named routes after successful FoxPro launch
+# Only named routes in this list are allowed for redirect
+# Do not include admin routes in pilot scope
+FOXPRO_ALLOWED_RETURN_PATHS = [
+    'project_requests:dashboard',  # Default and pilot-allowed
+    'project_requests:index',        # Pilot-allowed
+]

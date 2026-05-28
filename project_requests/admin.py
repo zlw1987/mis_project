@@ -41,6 +41,15 @@ class ProjectRequestActivityLogInline(admin.TabularInline):
     readonly_fields = ("action_type", "from_status", "to_status", "description", "comment", "actor", "created_at")
     can_delete = False
 
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(ProjectRequest)
 class ProjectRequestAdmin(admin.ModelAdmin):
@@ -130,14 +139,12 @@ class ProjectRequestActivityLogAdmin(admin.ModelAdmin):
         "project_request", "action_type", "from_status", "to_status",
         "description", "comment", "actor", "created_at",
     )
-    exclude = ()
 
     def has_add_permission(self, request, obj=None):
         return False
 
-    def has_delete_permission(self, request, obj=None):
+    def has_change_permission(self, request, obj=None):
         return False
 
-    def save_model(self, request, obj, form, change):
-        # Prevent any modifications to existing records
-        pass
+    def has_delete_permission(self, request, obj=None):
+        return False
