@@ -1,0 +1,44 @@
+name: Django Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  django-checks:
+    name: Django targeted checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Django system check
+        run: python manage.py check
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run targeted Django tests
+        run: python manage.py test accounts project_requests external_auth --verbosity 2
