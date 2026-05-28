@@ -1,0 +1,86 @@
+name: MIS AI Task
+description: Controlled implementation task for MIS_PROJECT
+title: "[MIS] "
+labels: ["ai-ready"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should this ticket accomplish?
+      placeholder: "Example: Add a read-only admin page for ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_context
+    attributes:
+      label: Current Context
+      description: What is already implemented? What should the AI know before editing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Exact files, modules, or behavior that may be changed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: What must NOT be changed or implemented in this ticket?
+      placeholder: |
+        - Do not change FoxPro launch behavior.
+        - Do not implement future SSO.
+        - Do not refactor unrelated views.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know this ticket is done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Required Verification
+      description: Targeted commands to run.
+      value: |
+        - [ ] python manage.py check
+        - [ ] python manage.py makemigrations --check
+        - [ ] targeted tests only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk_level
+    attributes:
+      label: Risk Level
+      options:
+        - Low - docs or UI text only
+        - Medium - Django view/form/template logic
+        - High - model/migration/auth/legacy behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: ai_instructions
+    attributes:
+      label: AI Instructions
+      value: |
+        Use minimax-m2.7 for implementation.
+        Do not use qwen3.6-27b for complex implementation.
+        Do not modify unrelated files.
+        Do not implement future-phase features.
+        Stop and report if scope expansion is required.
