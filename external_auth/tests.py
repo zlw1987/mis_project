@@ -604,3 +604,268 @@ class FoxProNonceReplayTestCase(TestCase):
                 nonce_hash=nonce_hash,
                 source_ip='127.0.0.2',
             )
+
+
+@override_settings(
+    FOXPRO_V2_SECRET='test-secret-key-for-foxpro-v2',
+    FOXPRO_LAUNCH_MAX_AGE_SECONDS=15,
+    FOXPRO_ALLOWED_IPS=[],
+    FOXPRO_ALLOWED_RETURN_PATHS=['project_requests:dashboard'],
+    FOXPRO_SIGNATURE_MODE='legacy_v2',  # Required for valid tests
+)
+class FoxProSignatureModeTestCase(TestCase):
+    """Tests for signature mode handling."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.dept = Department.objects.create(
+            dept_code='ACCT',
+            dept_name='Accounting',
+            is_active=True
+        )
+        self.user = User.objects.create_user(
+            username='jsmith',
+            password='test',
+            employee_id='E001',
+            is_active=True
+        )
+        UserDepartment.objects.create(
+            user=self.user,
+            department=self.dept,
+            access_level='STAFF',
+            is_active=True
+        )
+        self.secret = 'test-secret-key-for-foxpro-v2'
+    
+    def _make_valid_params(self, overrides=None):
+        """Create valid launch parameters."""
+        import pytz
+        la_tz = pytz.timezone('America/Los_Angeles')
+        timestamp = datetime.now(la_tz).strftime('%Y%m%d%H%M%S')
+        params = {
+            'v': '2',
+            'n': 'jsmith',
+            'ln': 'John Smith',
+            'dp': 'ACCT',
+            't': 'Sr. Accountant',
+            'o': 'STAFF',
+            'd': timestamp,
+            'nonce': 'test-nonce-12345678901234567890',
+            'return': 'project_requests:dashboard',
+        }
+        params.update(overrides or {})
+        return params
+    
+    def _sign_params(self, params):
+        """Add signature to params."""
+        params = params.copy()
+        canonical = foxpro_canonical_v2(params)
+        params['sig'] = foxpro_sign_v2(canonical, self.secret)
+        return params
+    
+    @override_settings(FOXPRO_SIGNATURE_MODE='hmac_sha256')
+    def test_unsupported_signature_mode_returns_400_and_creates_failed_attempt(self):
+        """Test that unsupported signature mode returns 400 and creates failed FoxproLaunchAttempt."""
+        params = self._make_valid_params()
+        params = self._sign_params(params)
+        
+        query = '&'.join(f'{k}={v}' for k, v in params.items())
+        url = f'/auth/foxpro-launch/?{query}'
+        
+        response = self.client.get(url)
+        
+        # Should return 400 (generic error)
+        self.assertEqual(response.status_code, 400)
+        
+        # Should create failed attempt record
+        attempt = FoxproLaunchAttempt.objects.filter(
+            failure_reason='UNSUPPORTED_SIGNATURE_MODE'
+        ).first()
+        self.assertIsNotNone(attempt)
+        self.assertFalse(attempt.success)
+        self.assertFalse(attempt.signature_valid)
+        self.assertFalse(attempt.timestamp_valid)
+        # Nonce should NOT be reserved
+        self.assertIsNone(attempt.nonce_reservation)
+    
+    @override_settings(FOXPRO_SIGNATURE_MODE=None)
+    def test_none_signature_mode_returns_400_and_creates_failed_attempt(self):
+        """Test that None signature mode returns 400 and creates failed FoxproLaunchAttempt."""
+        params = self._make_valid_params()
+        params = self._sign_params(params)
+        
+        query = '&'.join(f'{k}={v}' for k, v in params.items())
+        url = f'/auth/foxpro-launch/?{query}'
+        
+        response = self.client.get(url)
+        
+        # Should return 400 (generic error)
+        self.assertEqual(response.status_code, 400)
+        
+        # Should create failed attempt record
+        attempt = FoxproLaunchAttempt.objects.filter(
+            failure_reason='UNSUPPORTED_SIGNATURE_MODE'
+        ).first()
+        self.assertIsNotNone(attempt)
+
+
+class FoxProIPHandlingTestCase(TestCase):
+    """Tests for IP address handling."""
+    
+    def test_x_forwarded_for_not_trusted_by_default(self):
+        """Test that X-Forwarded-For is NOT trusted by default (FOXPRO_TRUST_X_FORWARDED_FOR=False)."""
+        factory = RequestFactory()
+        
+        # Set REMOTE_ADDR to one value and HTTP_X_FORWARDED_FOR to another
+        request = factory.get('/auth/foxpro-launch/')
+        request.META['REMOTE_ADDR'] = '192.168.1.100'
+        request.META['HTTP_X_FORWARDED_FOR'] = '10.0.0.1, 10.0.0.2'
+        
+        # get_client_ip should use REMOTE_ADDR when FOXPRO_TRUST_X_FORWARDED_FOR is False
+        with override_settings(FOXPRO_TRUST_X_FORWARDED_FOR=False):
+            ip = get_client_ip(request)
+            self.assertEqual(ip, '192.168.1.100')
+    
+    def test_x_forwarded_for_trusted_when_setting_is_true(self):
+        """Test that X-Forwarded-For IS trusted when FOXPRO_TRUST_X_FORWARDED_FOR=True."""
+        factory = RequestFactory()
+        
+        # Set REMOTE_ADDR to one value and HTTP_X_FORWARDED_FOR to another
+        request = factory.get('/auth/foxpro-launch/')
+        request.META['REMOTE_ADDR'] = '192.168.1.100'
+        request.META['HTTP_X_FORWARDED_FOR'] = '10.0.0.1, 10.0.0.2'
+        
+        # get_client_ip should use first X-Forwarded-For value when setting is True
+        with override_settings(FOXPRO_TRUST_X_FORWARDED_FOR=True):
+            ip = get_client_ip(request)
+            self.assertEqual(ip, '10.0.0.1')
+    
+    def test_x_forwarded_for_first_ip_in_chain_used(self):
+        """Test that first IP in X-Forwarded-For chain is used."""
+        factory = RequestFactory()
+        
+        request = factory.get('/auth/foxpro-launch/')
+        request.META['REMOTE_ADDR'] = '127.0.0.1'
+        request.META['HTTP_X_FORWARDED_FOR'] = '203.0.113.195, 70.41.3.18, 150.172.238.178'
+        
+        with override_settings(FOXPRO_TRUST_X_FORWARDED_FOR=True):
+            ip = get_client_ip(request)
+            self.assertEqual(ip, '203.0.113.195')
+
+
+@override_settings(
+    FOXPRO_V2_SECRET='test-secret-key-for-foxpro-v2',
+    FOXPRO_LAUNCH_MAX_AGE_SECONDS=15,
+    FOXPRO_ALLOWED_IPS=[],
+    FOXPRO_ALLOWED_RETURN_PATHS=['project_requests:dashboard'],
+    FOXPRO_SIGNATURE_MODE='legacy_v2',
+    FOXPRO_LAUNCH_TIMEZONE='America/Los_Angeles',
+)
+class FoxProTimezoneTestCase(TestCase):
+    """Tests for timezone handling in timestamp validation."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.dept = Department.objects.create(
+            dept_code='ACCT',
+            dept_name='Accounting',
+            is_active=True
+        )
+        self.user = User.objects.create_user(
+            username='jsmith',
+            password='test',
+            employee_id='E001',
+            is_active=True
+        )
+        UserDepartment.objects.create(
+            user=self.user,
+            department=self.dept,
+            access_level='STAFF',
+            is_active=True
+        )
+        self.secret = 'test-secret-key-for-foxpro-v2'
+    
+    def _make_valid_params(self, overrides=None):
+        """Create valid launch parameters with LA timezone timestamp."""
+        import pytz
+        la_tz = pytz.timezone('America/Los_Angeles')
+        timestamp = datetime.now(la_tz).strftime('%Y%m%d%H%M%S')
+        params = {
+            'v': '2',
+            'n': 'jsmith',
+            'ln': 'John Smith',
+            'dp': 'ACCT',
+            't': 'Sr. Accountant',
+            'o': 'STAFF',
+            'd': timestamp,
+            'nonce': 'test-nonce-12345678901234567890',
+            'return': 'project_requests:dashboard',
+        }
+        params.update(overrides or {})
+        return params
+    
+    def _sign_params(self, params):
+        """Add signature to params."""
+        params = params.copy()
+        canonical = foxpro_canonical_v2(params)
+        params['sig'] = foxpro_sign_v2(canonical, self.secret)
+        return params
+    
+    def test_local_timezone_timestamp_succeeds(self):
+        """Test that local timezone (LA) timestamp succeeds with FOXPRO_LAUNCH_TIMEZONE='America/Los_Angeles'."""
+        # Generate timestamp in LA timezone
+        import pytz
+        la_tz = pytz.timezone('America/Los_Angeles')
+        now_la = datetime.now(la_tz)
+        
+        params = self._make_valid_params({
+            'd': now_la.strftime('%Y%m%d%H%M%S'),
+            'nonce': 'timezone-test-nonce-12345678901234567890',
+        })
+        params = self._sign_params(params)
+        
+        query = '&'.join(f'{k}={v}' for k, v in params.items())
+        url = f'/auth/foxpro-launch/?{query}'
+        
+        response = self.client.get(url)
+        
+        # Should succeed (302 redirect)
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse('project_requests:dashboard'))
+        
+        # Verify attempt was created with timestamp_valid=True
+        attempt = FoxproLaunchAttempt.objects.filter(
+            short_name='jsmith',
+            success=True
+        ).first()
+        self.assertIsNotNone(attempt)
+        self.assertTrue(attempt.timestamp_valid)
+        self.assertTrue(attempt.signature_valid)
+    
+    def test_expired_timestamp_in_la_timezone_fails(self):
+        """Test that expired timestamp in LA timezone fails validation."""
+        import pytz
+        la_tz = pytz.timezone('America/Los_Angeles')
+        # Create a timestamp 30 seconds in the past (expired with 15s max age)
+        old_time_la = datetime.now(la_tz) - timedelta(seconds=30)
+        
+        params = self._make_valid_params({
+            'd': old_time_la.strftime('%Y%m%d%H%M%S'),
+            'nonce': 'expired-tz-nonce-12345678901234567890',
+        })
+        params = self._sign_params(params)
+        
+        query = '&'.join(f'{k}={v}' for k, v in params.items())
+        url = f'/auth/foxpro-launch/?{query}'
+        
+        response = self.client.get(url)
+        
+        # Should fail with 400
+        self.assertEqual(response.status_code, 400)
+        
+        # Verify attempt was created with TIMESTAMP_EXPIRED
+        attempt = FoxproLaunchAttempt.objects.filter(
+            short_name='jsmith',
+            failure_reason='TIMESTAMP_EXPIRED'
+        ).first()
+        self.assertIsNotNone(attempt)

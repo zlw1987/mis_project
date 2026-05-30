@@ -432,7 +432,7 @@
 
 ## Phase 4 — Dashboard, Polish, Legacy Migration, External Auth
 
-**Status:** Phase 4B complete. Phase 4E documentation sync in progress. Phase 4C, 4D, 4F deferred/blocked.
+**Status:** Phase 4B complete. Phase 4E documentation sync in progress. Phase 4F implementation complete; pilot readiness pending. Phase 4C, 4D deferred.
 
 ### Scope
 - Dashboard views and summaries
@@ -449,7 +449,7 @@
 | **Phase 4C** | UI polish and usability hardening | **Deferred** |
 | **Phase 4D** | Legacy migration assessment | **Deferred** |
 | **Phase 4E** | FoxPro/external auth architecture planning | **Documentation sync in progress — not yet approved** |
-| **Phase 4F** | FoxPro/external auth implementation | **BLOCKED — requires Phase 4E approved + prerequisites explicit** |
+| **Phase 4F** | FoxPro/external auth implementation | **Complete; pilot readiness pending** |
 
 ### Phase 4B — Complete
 
@@ -468,30 +468,41 @@ Phase 4D is deferred. Not started.
 **Status:** Documentation synchronization cleanup in progress (this task). Not yet approved.
 
 Phase 4E architecture in `documents/FOXPRO_AUTH_PLAN.md`:
-- **Pattern:** Signed Launch URL with HMAC-SHA256 (NOT token exchange)
+- **Pattern:** Signed Launch URL with **custom FoxPro-compatible V2 signature** (NOT HMAC-SHA256)
+- **Signature format:** `V2-{h1:010d}-{h2:010d}-{h3:010d}`
+- **Canonical string:** `MIS2|n|ln|dp|t|o|d|nonce|return`
+- **Secret setting:** `FOXPRO_V2_SECRET` (NOT `FOXPRO_HMAC_SECRET`)
 - **Endpoint:** `GET /auth/foxpro-launch/`
 - **App:** New `external_auth` Django app
 - **Models:** `FoxproLaunchAttempt` + `FoxproLaunchNonce` only
+- **v=2 only:** No v1 fallback in pilot
+- **No token exchange:** No LaunchSession, no /auth/launch-token/, no /auth/launch/
+- **Deployment:** **Network-share EXE on local workstations** (NOT central terminal/server)
+- **Central terminal/server:** **Future alternative only** — NOT current pilot
 - **FoxPro `o`:** Audit-only, NOT used for Django authorization
 - **User mapping:** `employee_id` first, fallback `username`; no auto-create
 - **Return URL:** Named route allowlist + `reverse()`; `admin:index` NOT in pilot
 
-### Phase 4F — BLOCKED
+### Phase 4F — Implementation Complete; Pilot Readiness Pending
 
-**Phase 4F is blocked** until Phase 4E docs are synchronized/approved AND prerequisites are explicit.
+**Phase 4F code implementation is complete.** external_auth app exists with V2 signature validation.
 
-**Prerequisites required before Phase 4F:**
-1. Helper EXE/DLL secret protection choice finalized
-2. Shared secret generated and stored
-3. Terminal server static IP / allowlist value confirmed
-4. Timestamp convention selected (UTC or terminal-server-local)
-5. Helper I/O contract finalized
-6. Legacy fallback approval/sunset (if needed)
+**Pilot/go-live is NOT approved until:**
+1. `python manage.py check` passes
+2. `python manage.py makemigrations --check --dry-run` passes
+3. `python manage.py test external_auth -v 2` passes
+4. User manually runs full test suite
+5. Migration is reviewed/applied
+6. `FOXPRO_V2_SECRET` is set to real secret and matches FoxPro `MisSecretV2()`
+7. `FOXPRO_ALLOWED_IPS` is configured for actual workstation/NAT/proxy source IPs
+8. `FOXPRO_LAUNCH_TIMEZONE` is configured
+9. v=2 FoxPro-side URL generation is updated and tested
+10. End-to-end FoxPro → Django dashboard launch succeeds
 
-**Phase 4F subphases (when unblocked):**
+**Phase 4F subphases (completed):**
 - Phase 4F-1: external_auth app + models + settings
-- Phase 4F-2: Signed launch validation view + tests
-- Phase 4F-3: FoxPro 5/helper integration test
+- Phase 4F-2: V2 signature validation view + tests
+- Phase 4F-3: FoxPro 5 integration test
 - Phase 4F-4: Legacy fallback (ONLY if explicitly approved)
 
 ### Exit Criteria (not yet applicable for Phase 4C+)

@@ -9,8 +9,8 @@
 - **Phase 4B Dashboard implementation: COMPLETE.** User manually ran full test suite and confirmed it passed.
 - **Final Phase 4E documentation synchronization cleanup is in progress (this task).** No code/templates/URLs/migrations modified.
 - **Phase 4C (UI polish) is paused/deferred.** Implementation has not started.
-- **Phase 4F is blocked** until Phase 4E docs are synchronized/approved and prerequisites are explicit.
-- **Current blockers:** Phase 4F prerequisites not yet explicit (helper secret protection, shared secret, terminal IP, timestamp convention, helper I/O contract).
+- **Phase 4F implementation complete; pilot readiness pending.** external_auth app exists with V2 signature validation. Pilot/go-live is NOT approved until verification steps are completed.
+- **Current blockers:** Pilot readiness — see Phase 4F verification steps below.
 
 ---
 
@@ -69,13 +69,19 @@ These items were identified during Phase 3D-5A review but are NOT blockers:
 
 **Final Phase 4E documentation synchronization cleanup.** Phase 4B is complete.
 
-Phase 4F is BLOCKED until Phase 4E docs are synchronized/approved and prerequisites are explicit:
-1. Helper EXE/DLL secret protection choice
-2. Shared secret generated and stored
-3. Terminal server static IP / allowlist value
-4. Timestamp convention (UTC or terminal-server-local)
-5. Helper I/O contract finalized
-6. Legacy fallback approval/sunset (if needed)
+Phase 4F implementation is complete; pilot readiness is pending verification:
+
+**Pilot/go-live is NOT approved until:**
+1. `python manage.py check` passes
+2. `python manage.py makemigrations --check --dry-run` passes
+3. `python manage.py test external_auth -v 2` passes
+4. User manually runs full test suite
+5. Migration is reviewed/applied
+6. `FOXPRO_V2_SECRET` is set to real secret and matches FoxPro `MisSecretV2()`
+7. `FOXPRO_ALLOWED_IPS` is configured for actual workstation/NAT/proxy source IPs
+8. `FOXPRO_LAUNCH_TIMEZONE` is configured
+9. v=2 FoxPro-side URL generation is updated and tested
+10. End-to-end FoxPro → Django dashboard launch succeeds
 
 Phase 4C and Phase 4D remain deferred.
 
@@ -83,14 +89,7 @@ Phase 4C and Phase 4D remain deferred.
 
 ## Current Blockers
 
-Phase 4F prerequisites not explicit — no code implementation possible until:
-- Helper EXE/DLL secret protection choice is finalized
-- Shared secret is generated and stored
-- Terminal server static IP / allowlist value is confirmed
-- Timestamp convention is selected
-- Helper I/O contract is finalized
-
-Phase 4F implementation has NOT started and must NOT begin until these are explicit.
+Phase 4F code implementation is complete. Current blockers are pilot readiness verification steps listed above — not implementation blockers.
 
 ---
 

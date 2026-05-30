@@ -25,6 +25,7 @@ class FoxproLaunchAttempt(models.Model):
         TIMESTAMP_EXPIRED = 'TIMESTAMP_EXPIRED', 'Timestamp Expired'
         INVALID_SIGNATURE = 'INVALID_SIGNATURE', 'Invalid Signature'
         NONCE_REUSED = 'NONCE_REUSED', 'Nonce Reused'
+        UNSUPPORTED_SIGNATURE_MODE = 'UNSUPPORTED_SIGNATURE_MODE', 'Unsupported Signature Mode'
         USER_NOT_FOUND = 'USER_NOT_FOUND', 'User Not Found'
         USER_INACTIVE = 'USER_INACTIVE', 'User Inactive'
         DEPT_NOT_FOUND = 'DEPT_NOT_FOUND', 'Department Not Found'
