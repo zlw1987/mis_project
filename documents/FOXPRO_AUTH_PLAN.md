@@ -51,7 +51,7 @@ This approach has a problem for FoxPro 5: **FoxPro's existing SHELLEXEC workflow
 
 A **signed launch URL** simplifies FoxPro 5 changes:
 
-- FoxPro 5 builds the URL with all parameters and a HMAC signature
+- FoxPro 5 builds the URL with all parameters and a V2 signature
 - FoxPro 5 calls SHELLEXEC once with the complete URL
 - Django validates and creates session in one request
 
@@ -64,7 +64,7 @@ A **signed launch URL** simplifies FoxPro 5 changes:
 └─────────┘  ?n=...&ln=...&dp=...    │                      │              │ created    │
              &t=...&d=...&o=...      └──────────────────────┘              └────────────┘
              &nonce=...&return=...    ◄─── redirect ────                     │
-             &sig=HMAC(...)         reverse dashboard route                  │
+             &sig=V2-{h1:010d}-{h2:010d}-{h3:010d}         reverse dashboard route                  │
                                (named route resolved at runtime)
 ```
 
@@ -75,7 +75,7 @@ A **signed launch URL** simplifies FoxPro 5 changes:
 | FoxPro change | Single SHELLEXEC call | Must call token endpoint, read JSON, then SHELLEXEC |
 | FoxPro complexity | Lower | Higher (requires JSON parsing) |
 | Django complexity | Single view validates + logs | Two views (token gen + launch) |
-| Security | Equivalent (HMAC + timestamp + nonce) | Equivalent |
+| Security | Equivalent (V2 signature + timestamp + nonce) | Equivalent |
 | Audit trail | One request logged | Two requests logged (token gen + launch) |
 | Token storage | No DB token storage needed | LaunchSession token in DB |
 | Replay protection | Nonce stored per launch | Token single-use in DB |
@@ -269,12 +269,12 @@ FoxPro 5 may not have a cryptographically strong random number generator. Accept
 
 | Strategy | Description | Recommendation |
 |----------|-------------|----------------|
-| **Helper generates nonce** | Helper EXE/DLL generates nonce and returns it along with HMAC | **Preferred** — use if helper is deployed |
+| **Helper generates nonce** | Helper EXE/DLL generates nonce and returns it along with V2 signature | **Preferred** — use if helper is deployed |
 | **FoxPro SYS(2015) + timestamp** | FoxPro's `SYS(2015)` returns a unique 10-character string; combine with timestamp | Acceptable fallback |
 | **Counter + timestamp** | Increment a persistent counter combined with timestamp | Acceptable if counter is persisted |
 | **Timestamp + short name hash** | Combine timestamp with short name, hash to create uniqueness | Acceptable fallback |
 
-If nonce quality is weak, the timestamp max age (120 seconds) and HMAC signature still provide significant replay protection.
+If nonce quality is weak, the timestamp max age (15 seconds) and V2 signature still provide significant replay protection.
 
 **Django stores all nonces and rejects reuse regardless of generation method.**
 
@@ -308,7 +308,7 @@ Records every launch attempt for audit purposes.
 | `legacy_access_level` | CharField(10, nullable) | FoxPro `o` param — audit only |
 | `nonce_hash` | CharField(64) | SHA-256 hash of nonce from launch URL (for audit) |
 | `source_ip` | GenericIPAddressField | Client IP address |
-| `signature_valid` | BooleanField | HMAC signature passed validation |
+| `signature_valid` | BooleanField | V2 signature passed validation |
 | `timestamp_valid` | BooleanField | Timestamp within max age |
 | `user` | ForeignKey(User, null) | Mapped Django user (null if no match) |
 | `success` | BooleanField | Launch succeeded (user found, session created) |
@@ -980,7 +980,7 @@ def rate_limit_by_ip(request, limit=10, window=60):
 |------|-------------|-----------------|
 | `test_valid_signed_launch` | Valid V2 signature, valid user, valid timestamp | User logged in, redirect to dashboard |
 | `test_invalid_signature` | Wrong V2 sig | 400 Bad Request, `failure_reason=INVALID_SIGNATURE` |
-| `test_expired_timestamp` | Timestamp > 120 seconds old | 400 Bad Request, `failure_reason=TIMESTAMP_EXPIRED` |
+| `test_expired_timestamp` | Timestamp > 15 seconds old | 400 Bad Request, `failure_reason=TIMESTAMP_EXPIRED` |
 | `test_reused_nonce` | Nonce already in `FoxproLaunchNonce` | 400 Bad Request, `failure_reason=NONCE_REUSED` |
 | `test_unknown_user` | `n` matches no Django user | 400 Bad Request, `failure_reason=USER_NOT_FOUND` |
 | `test_inactive_user` | User exists but `is_active=False` | 400 Bad Request, `failure_reason=USER_INACTIVE` |

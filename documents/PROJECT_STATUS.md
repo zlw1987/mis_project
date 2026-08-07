@@ -7,7 +7,7 @@
 - **Phase 3 is complete.** All subphases (3A, 3B, 3C, 3D) are done.
 - **Phase 3D-5A final hardening review: PASS.** 116 targeted tests OK. Views are thin wrappers. No business logic duplication. CSRF and POST-only enforced. No blockers.
 - **Phase 4B Dashboard implementation: COMPLETE.** User manually ran full test suite and confirmed it passed.
-- **Final Phase 4E documentation synchronization cleanup is in progress (this task).** No code/templates/URLs/migrations modified.
+- **Final Phase 4E documentation synchronization cleanup is in progress (this task).** external_auth app implementation complete; migration 0002_add_unsupported_signature_mode.py added.
 - **Phase 4C (UI polish) is paused/deferred.** Implementation has not started.
 - **Phase 4F implementation complete; pilot readiness pending.** external_auth app exists with V2 signature validation. Pilot/go-live is NOT approved until verification steps are completed.
 - **Current blockers:** Pilot readiness — see Phase 4F verification steps below.

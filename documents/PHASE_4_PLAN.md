@@ -701,7 +701,7 @@ The Signed Launch URL architecture from `documents/FOXPRO_AUTH_PLAN.md` is the c
 - Write/update `documents/FOXPRO_AUTH_PLAN.md` with Signed Launch URL design (NOT token exchange)
 - Design `FoxproLaunchAttempt` model schema
 - Design `FoxproLaunchNonce` model schema
-- Design validation flow (IP → params → timestamp → HMAC → nonce → return → user → department → login → redirect)
+- Design validation flow (IP → params → timestamp → V2 signature → nonce → return → user → department → login → redirect)
 - Design helper EXE/DLL requirements (Option B: central terminal/server)
 - Design FoxPro change requirements
 - Design audit logging approach
@@ -860,8 +860,8 @@ The Signed Launch URL architecture from `documents/FOXPRO_AUTH_PLAN.md` is the c
 **Mitigation:**
 - Nonce uniqueness enforced via `FoxproLaunchNonce` unique constraint on `nonce_hash`
 - Reused nonce creates failed `FoxproLaunchAttempt` (for audit) but request is rejected
-- Invalid HMAC does NOT reserve nonce — nonce reservation happens only after HMAC passes
-- Timestamp max age (120 seconds) limits replay window
+- Invalid V2 signature does NOT reserve nonce — nonce reservation happens only after V2 signature passes
+- Timestamp max age (15 seconds) limits replay window
 - Audit log tracks all launch attempts
 
 ### 6.7 Accidental Implementation Before Planning
@@ -896,7 +896,7 @@ The Signed Launch URL architecture from `documents/FOXPRO_AUTH_PLAN.md` is the c
 
 **Phase 4B is complete.** Dashboard implementation is done and accepted by user.
 
-**Phase 4E documentation synchronization is in progress (this task).** This is the only work being done. No code/templates/URLs/migrations modified.
+**Phase 4E documentation synchronization is in progress (this task).** This is documentation-only work. Phase 4F implementation is complete with external_auth app changes and migration 0002; pilot readiness verification steps above must be completed before go-live.
 
 **Phase 4C and Phase 4D remain deferred.**
 
