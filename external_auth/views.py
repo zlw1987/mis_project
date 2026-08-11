@@ -86,6 +86,22 @@ class FoxProLaunchView(View):
         signature_mode = getattr(settings, 'FOXPRO_SIGNATURE_MODE', None)
         if signature_mode != 'legacy_v2':
             logger.warning(f"FoxPro launch blocked - unsupported signature mode: {signature_mode}")
+            # Create failed attempt record for audit (no nonce reserved, no params available)
+            FoxproLaunchAttempt.objects.create(
+                short_name='',
+                long_name='',
+                dept_code='',
+                title='',
+                legacy_access_level='',
+                return_path='',
+                nonce_hash='',
+                source_ip=source_ip,
+                signature_valid=False,
+                timestamp_valid=False,
+                success=False,
+                failure_reason=FoxproLaunchAttempt.FailureReason.UNSUPPORTED_SIGNATURE_MODE,
+                raw_params={'signature_mode': signature_mode},
+            )
             return render_error_response(request)
         
         # Initialize tracking variables
@@ -200,18 +216,18 @@ class FoxProLaunchView(View):
         
         # Step 10 & 11: Atomically reserve nonce
         nonce_reservation = None
-        from django.db import transaction
+        from django.db import transaction, IntegrityError
         try:
             with transaction.atomic():
                 nonce_reservation = FoxproLaunchNonce.objects.create(
                     nonce_hash=nonce_hash,
                     source_ip=source_ip,
                 )
-        except Exception:
+        except IntegrityError:
             # Nonce already exists (unique constraint violation)
             logger.warning(f"FoxPro launch failed - nonce reused: {nonce_hash[:12]}...")
             create_failed_attempt(FoxproLaunchAttempt.FailureReason.NONCE_REUSED,
-                                 signature_valid=True, timestamp_valid=True)
+                                  signature_valid=True, timestamp_valid=True)
             return render_error_response(request)
         
         # Step 12: If we get here, nonce is reserved (signature was valid)

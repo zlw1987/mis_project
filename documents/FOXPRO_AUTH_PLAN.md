@@ -26,15 +26,17 @@
 
 ## 1. Recommended Architecture
 
-### 1.1 Approach: Signed Launch URL with HMAC-SHA256
+### 1.1 Approach: Signed Launch URL with FoxPro-Compatible Custom V2 Signature
 
-The recommended approach is a **Signed Launch URL** pattern:
+The implemented approach is a **Signed Launch URL** pattern with a **FoxPro-compatible custom V2 signature**:
 
 - FoxPro 5 builds normalized launch parameters
-- FoxPro 5 uses SHELLEXEC to open a HMAC-signed launch URL
+- FoxPro 5 uses SHELLEXEC to open a V2-signed launch URL
 - Django validates the signature on `GET /auth/foxpro-launch/`
 - Django creates a Django session and redirects to the dashboard
 - All launch attempts are recorded in an audit log model
+
+**Signature format:** `V2-{h1:010d}-{h2:010d}-{h3:010d}` (custom FoxPro-compatible format, NOT HMAC-SHA256)
 
 **FoxPro-side implementation will be written by the user in FoxPro 5.** Do not assume native HMAC-SHA256, JSON parsing, or modern HTTPS client features in FoxPro 5.
 
@@ -49,7 +51,7 @@ This approach has a problem for FoxPro 5: **FoxPro's existing SHELLEXEC workflow
 
 A **signed launch URL** simplifies FoxPro 5 changes:
 
-- FoxPro 5 builds the URL with all parameters and a HMAC signature
+- FoxPro 5 builds the URL with all parameters and a V2 signature
 - FoxPro 5 calls SHELLEXEC once with the complete URL
 - Django validates and creates session in one request
 
@@ -62,7 +64,7 @@ A **signed launch URL** simplifies FoxPro 5 changes:
 └─────────┘  ?n=...&ln=...&dp=...    │                      │              │ created    │
              &t=...&d=...&o=...      └──────────────────────┘              └────────────┘
              &nonce=...&return=...    ◄─── redirect ────                     │
-             &sig=HMAC(...)         reverse dashboard route                  │
+             &sig=V2-{h1:010d}-{h2:010d}-{h3:010d}         reverse dashboard route                  │
                                (named route resolved at runtime)
 ```
 
@@ -73,7 +75,7 @@ A **signed launch URL** simplifies FoxPro 5 changes:
 | FoxPro change | Single SHELLEXEC call | Must call token endpoint, read JSON, then SHELLEXEC |
 | FoxPro complexity | Lower | Higher (requires JSON parsing) |
 | Django complexity | Single view validates + logs | Two views (token gen + launch) |
-| Security | Equivalent (HMAC + timestamp + nonce) | Equivalent |
+| Security | Equivalent (V2 signature + timestamp + nonce) | Equivalent |
 | Audit trail | One request logged | Two requests logged (token gen + launch) |
 | Token storage | No DB token storage needed | LaunchSession token in DB |
 | Replay protection | Nonce stored per launch | Token single-use in DB |
@@ -98,11 +100,11 @@ GET /auth/foxpro-launch/
 | `ln` | string | Yes | Long name (display only) |
 | `dp` | string | Yes | Department code |
 | `t` | string | Yes | Title (employee title) |
-| `d` | string | Yes | Timestamp in `YYYYMMDDHHMMSS` format |
+| `d` | string | Yes | Timestamp in `YYYYMMDDHHMMSS` format (local timezone, see Section 2.4) |
 | `o` | string | No | Legacy access level (audit only, not used for authorization) |
 | `nonce` | string | Yes | Random unique string (32+ chars recommended) |
 | `return` | string | No | Named route for redirect after login (default: `project_requests:dashboard`) |
-| `sig` | string | Yes | HMAC-SHA256 signature (hex-encoded, 64 chars) |
+| `sig` | string | Yes | Custom V2 signature in format `V2-{h1:010d}-{h2:010d}-{h3:010d}` |
 
 ### 2.3 Canonical Signing String
 
@@ -139,15 +141,16 @@ john.smith|John Smith|ACCT|Sr. Accountant|20260527192015|2|a7f3c8d2e9b4f1a6c0d5e
 
 Django resolves `return=project_requests:dashboard` to actual path (e.g., `/project_requests/dashboard/`) at redirect time using `reverse()`.
 
-HMAC-SHA256 key: shared secret from `settings.FOXPRO_HMAC_SECRET`
-HMAC-SHA256 output: hex-encoded 64-character string
+**V2 signature key:** shared secret from `settings.FOXPRO_V2_SECRET`
+**V2 signature output:** custom format `V2-{h1:010d}-{h2:010d}-{h3:010d}` (NOT HMAC-SHA256 hex)
+**Canonical string format:** `MIS2|n|ln|dp|t|o|d|nonce|return`
 
 ### 2.4 Timestamp Format and Max Age
 
-- **Format:** `YYYYMMDDHHMMSS` (14 characters, UTC or local time — must be consistent between FoxPro and Django)
-- **Max age:** 120 seconds (2 minutes)
-- **Clock drift tolerance:** 30 seconds additional (total 150 second window)
-- **Recommendation:** Use server time on both FoxPro and Django side; configure NTP synchronization
+- **Format:** `YYYYMMDDHHMMSS` (14 characters, local workstation time)
+- **Timezone:** Configured via `FOXPRO_LAUNCH_TIMEZONE` setting (default: `America/Los_Angeles`)
+- **Max age:** 15 seconds (configured via `FOXPRO_LAUNCH_MAX_AGE_SECONDS`)
+- **Recommendation:** Use local workstation time on FoxPro side; Django interprets timestamp in configured timezone
 
 ### 2.5 Return URL Safety
 
@@ -167,20 +170,21 @@ The `return` parameter accepts Django named routes. Django resolves them to actu
 
 FoxPro 5 does not have built-in HMAC-SHA256, JSON parsing, or modern HTTPS client features. The following options are ranked by recommendation.
 
-### 3.1 Option A: FoxPro 5 Computes HMAC Directly
+### 3.1 Option A: FoxPro 5 Computes V2 Signature Directly
 
-**Feasibility: Only if proven feasible with FoxPro 5 libraries.** FoxPro 5 has limited cryptographic support. This option is **unlikely to be feasible** without external libraries.
+**Feasibility: This is the current pilot approach.** FoxPro 5 computes the custom V2 signature directly without external helpers.
 
 | Aspect | Assessment |
 |--------|------------|
-| FoxPro change required | Significant — requires 3rd-party DLL or Windows CryptoAPI calls |
-| Django change required | None (validate HMAC-SHA256) |
+| FoxPro change required | Medium — FoxPro 5 computes V2 signature directly |
+| Django change required | None (validate V2 signature) |
 | Security level | High |
-| Implementation complexity | High (FoxPro side) |
+| Implementation complexity | Medium (FoxPro side) |
+| Recommendation | **Current pilot approach** |
 
-### 3.2 Option B: FoxPro 5 Calls Local Helper EXE/DLL (Recommended)
+### 3.2 Option B: FoxPro 5 Calls Local Helper EXE/DLL (Future Alternative)
 
-FoxPro 5 calls a small compiled helper (EXE or DLL) that computes HMAC-SHA256. The helper is deployed on the same machine as FoxPro 5.
+FoxPro 5 calls a small compiled helper (EXE or DLL) that computes the V2 signature. The helper is deployed on the same machine as FoxPro 5.
 
 | Aspect | Assessment |
 |--------|------------|
@@ -188,11 +192,11 @@ FoxPro 5 calls a small compiled helper (EXE or DLL) that computes HMAC-SHA256. T
 | Django change required | None |
 | Security level | High |
 | Implementation complexity | Medium (helper development) |
-| Recommendation | **Recommended primary approach** |
+| Recommendation | **Future alternative only** — NOT current pilot |
 
 **Helper requirements:**
 - Accepts signing string and parameters as input
-- Computes and returns HMAC-SHA256 hex-encoded output
+- Computes and returns V2 signature (format: `V2-{h1:010d}-{h2:010d}-{h3:010d}`)
 - **Does NOT receive shared secret as command-line argument** — secret should be stored in protected local config file, environment variable, or compiled into the helper
 - Helper should also generate the nonce (see Section 3.6) to avoid weak RNG in FoxPro 5
 
@@ -203,22 +207,22 @@ FoxPro 5 calls a small compiled helper (EXE or DLL) that computes HMAC-SHA256. T
 
 **Important:** A local helper containing a shared secret is still an internal-trust compromise and should be protected with file permissions and access controls.
 
-### 3.3 Option C: FoxPro 5 Calls Internal Broker Service
+### 3.3 Option C: FoxPro 5 Calls Internal Broker Service (Future Alternative)
 
-FoxPro 5 calls an internal broker/middleware service via HTTPS. The broker computes the HMAC and returns the signature or signed URL.
+FoxPro 5 calls an internal broker/middleware service via HTTPS. The broker computes the V2 signature and returns the signature or signed URL.
 
 | Aspect | Assessment |
 |--------|------------|
 | FoxPro change required | Medium — FoxPro 5 calls broker with employee info via HTTP GET |
-| Django change required | None (standard HMAC validation) |
+| Django change required | None (standard V2 signature validation) |
 | Security level | High |
 | Implementation complexity | Medium-High (broker service) |
-| Recommendation | **Recommended for centralized HMAC key management** |
+| Recommendation | **Future alternative only** — NOT current pilot |
 
 **Broker requirements:**
 - HTTPS endpoint (internal network only)
 - Accepts employee info + timestamp + nonce request
-- Returns HMAC signature or complete signed URL
+- Returns V2 signature or complete signed URL
 - Can be a simple Python/Node script
 - Broker holds the shared secret and performs signing internally
 
@@ -242,17 +246,22 @@ See [Section 9: Legacy Fallback Plan](#9-legacy-fallback-plan) for details.
 
 | Priority | Option | Rationale |
 |----------|--------|-----------|
-| 1 **(Recommended for pilot)** | **Option B: Helper EXE/DLL** | Best for central terminal/server; helper on same server owns secret, returns signature; no secret passed via command-line |
-| 2 | **Option C: Internal Broker** | Best for centralized management, easier to rotate HMAC key |
-| 3 | **Option A: FoxPro Direct** | Only if FoxPro 5 crypto libraries are proven available |
-| 4 | **Option D: Legacy Fallback** | Temporary only with sunset, not long-term |
+| 1 **(Current pilot)** | **Custom V2 Signature** | FoxPro-compatible custom signature format `V2-{h1:010d}-{h2:010d}-{h3:010d}`; implemented in Phase 4F |
+| 2 | **Option B: Helper EXE/DLL** | Future alternative: helper computes V2 signature; no secret passed via command-line |
+| 3 | **Option C: Internal Broker** | Future alternative: centralized V2 signature key management |
+| 4 | **Option A: FoxPro Direct** | Current pilot approach (same as priority 1) |
+| 5 | **Option D: Legacy Fallback** | Not implemented in Phase 4F pilot |
 
-**Deployment topology is confirmed: central terminal/server with helper EXE/DLL (Option B)**
-
-**Remaining decisions needed before Phase 4F:**
-1. How should the helper EXE/DLL secret be protected (config file, environment variable)?
-2. If Option A (direct HMAC) is claimed possible, provide proof of FoxPro 5 crypto support
-3. If Option D (legacy fallback) is needed, approve sunset timeline
+**Phase 4F pilot uses:**
+- `external_auth` app
+- `GET /auth/foxpro-launch/`
+- `v=2` only (no v1 fallback)
+- `FOXPRO_V2_SECRET` setting
+- Custom V2 signature format `V2-{h1:010d}-{h2:010d}-{h3:010d}`
+- Nonce replay protection
+- `o` parameter: audit-only, NOT used for Django authorization
+- No LaunchSession/token exchange
+- No HMAC-SHA256 (HMAC/helper/broker remain as future alternatives only)
 
 ### 3.6 Nonce Generation for FoxPro 5
 
@@ -260,12 +269,12 @@ FoxPro 5 may not have a cryptographically strong random number generator. Accept
 
 | Strategy | Description | Recommendation |
 |----------|-------------|----------------|
-| **Helper generates nonce** | Helper EXE/DLL generates nonce and returns it along with HMAC | **Preferred** — use if helper is deployed |
+| **Helper generates nonce** | Helper EXE/DLL generates nonce and returns it along with V2 signature | **Preferred** — use if helper is deployed |
 | **FoxPro SYS(2015) + timestamp** | FoxPro's `SYS(2015)` returns a unique 10-character string; combine with timestamp | Acceptable fallback |
 | **Counter + timestamp** | Increment a persistent counter combined with timestamp | Acceptable if counter is persisted |
 | **Timestamp + short name hash** | Combine timestamp with short name, hash to create uniqueness | Acceptable fallback |
 
-If nonce quality is weak, the timestamp max age (120 seconds) and HMAC signature still provide significant replay protection.
+If nonce quality is weak, the timestamp max age (15 seconds) and V2 signature still provide significant replay protection.
 
 **Django stores all nonces and rejects reuse regardless of generation method.**
 
@@ -299,7 +308,7 @@ Records every launch attempt for audit purposes.
 | `legacy_access_level` | CharField(10, nullable) | FoxPro `o` param — audit only |
 | `nonce_hash` | CharField(64) | SHA-256 hash of nonce from launch URL (for audit) |
 | `source_ip` | GenericIPAddressField | Client IP address |
-| `signature_valid` | BooleanField | HMAC signature passed validation |
+| `signature_valid` | BooleanField | V2 signature passed validation |
 | `timestamp_valid` | BooleanField | Timestamp within max age |
 | `user` | ForeignKey(User, null) | Mapped Django user (null if no match) |
 | `success` | BooleanField | Launch succeeded (user found, session created) |
@@ -389,16 +398,19 @@ urlpatterns = [
 ```python
 # config/settings.py
 
-# FoxPro HMAC Settings
-FOXPRO_HMAC_SECRET = env('FOXPRO_HMAC_SECRET')  # 32+ byte random string
-FOXPRO_LAUNCH_MAX_AGE_SECONDS = 120  # 2 minutes
+# FoxPro V2 Signature Settings
+FOXPRO_SIGNATURE_MODE = 'legacy_v2'  # Required: must be 'legacy_v2' for pilot
+FOXPRO_V2_SECRET = env('FOXPRO_V2_SECRET')  # Shared secret for V2 signature
+FOXPRO_LAUNCH_MAX_AGE_SECONDS = 15  # 15 seconds (local workstation time)
+FOXPRO_LAUNCH_TIMEZONE = 'America/Los_Angeles'  # Timezone for timestamp interpretation
 
-# Pilot IP Allowlist: Specific static IP(s) of the central terminal/server
-# Replace with actual terminal server IP(s) before Phase 4F
-FOXPRO_ALLOWED_IPS = ['<TERMINAL_SERVER_STATIC_IP>']  # e.g., '10.1.2.100'
+# IP Allowlist: Empty for internal network, or specific IPs/subnets
+# FOXPRO_ALLOWED_IPS = []  # Allow all (internal network)
+# FOXPRO_ALLOWED_IPS = ['10.0.0.0/8']  # Internal subnet only
 
-# Future alternative (not pilot): Small subnet if terminal server has dynamic IP
-# FOXPRO_ALLOWED_IPS = ['10.1.2.0/24']  # Only after explicit approval
+# X-Forwarded-For Trust: Default False (use REMOTE_ADDR)
+# Set True only if behind a trusted proxy
+FOXPRO_TRUST_X_FORWARDED_FOR = False
 
 FOXPRO_ALLOWED_RETURN_PATHS = [
     'project_requests:dashboard',  # Use named route for internal redirect
@@ -409,25 +421,26 @@ FOXPRO_ALLOWED_RETURN_PATHS = [
 
 ### 4.6 Shared Secret Storage
 
-- **Never hardcode** the HMAC secret in source code
+- **Never hardcode** the V2 secret in source code
 - Store in environment variable or secret management system
-- Django settings reads from environment: `FOXPRO_HMAC_SECRET = env('FOXPRO_HMAC_SECRET')`
+- Django settings reads from environment: `FOXPRO_V2_SECRET = env('FOXPRO_V2_SECRET')`
 - Rotate the secret if a potential compromise is reported
 
 ### 4.7 IP Allowlist / Deployment Topology
 
-**Approved pilot deployment: Case A — Central terminal/server**
+**Current pilot deployment: Network-share EXE on local workstations**
 
+- FoxPro 5 runs on each user's local workstation
+- EXE is deployed via network share (not installed locally)
+- Django sees requests from the workstation/browser IP
+- IP allowlist may allow internal subnet ranges (e.g., 10.0.0.0/8) or be empty for internal network
+- Trust proof: V2 signature + nonce + timestamp (no IP allowlist dependency)
+
+**Legacy central terminal/server option (future alternative only):**
 - FoxPro 5 runs on a single shared server (central terminal/server)
 - Django sees requests from the server's static IP
 - IP allowlist restricts to that known server IP (or small server subnet)
-- Trust proof: HMAC signature + IP allowlist (static server IP)
-
-**Case B (Workstation SHELLEXEC) is documented as a future alternative only**, not the pilot path:
-- FoxPro 5 runs on each user's machine and uses SHELLEXEC
-- Django sees the workstation/browser IP (not a central server IP)
-- IP allowlist must allow internal subnet ranges (e.g., 10.0.0.0/8)
-- Real trust proof: HMAC signature + nonce + timestamp
+- Trust proof: V2 signature + IP allowlist (static server IP)
 
 ---
 
@@ -437,73 +450,80 @@ The `foxpro_launch` view performs validation in strict order:
 
 ### 5.1 Validation Order
 
-**Critical: Never sanitize or replace the `return` parameter before HMAC validation. The HMAC is computed over the exact `return` value provided by FoxPro. Any substitution before HMAC check would invalidate the signature.**
+**Critical: Never sanitize or replace the `return` parameter before signature validation. The V2 signature is computed over the exact `return` value provided by FoxPro. Any substitution before signature check would invalidate the signature.**
 
 ```
-1. Check source IP against FOXPRO_ALLOWED_IPS
-   → 403 Forbidden if not in allowlist
+0. Check FOXPRO_SIGNATURE_MODE is 'legacy_v2'
+   → If not: log failed FoxproLaunchAttempt (UNSUPPORTED_SIGNATURE_MODE), 400 Bad Request
+   → **Important:** No nonce reserved, no params available for audit
 
-2. Validate all required parameters present (n, ln, dp, t, d, nonce, sig)
+1. Check source IP against FOXPRO_ALLOWED_IPS (if configured)
+   → 400 Bad Request if not in allowlist
+
+2. Validate all required parameters present (v, n, ln, dp, t, d, nonce, return, sig)
    → 400 Bad Request if missing
 
-3. Validate timestamp format (YYYYMMDDHHMMSS)
+3. Require v == "2" (v1 fallback not implemented)
+   → 400 Bad Request if version is not "2"
+
+4. Validate timestamp format (YYYYMMDDHHMMSS)
    → 400 Bad Request if malformed
 
-4. Validate timestamp age (d within FOXPRO_LAUNCH_MAX_AGE_SECONDS of current time)
-   → 400 Bad Request "Link expired" if too old
+5. Validate timestamp age (d within FOXPRO_LAUNCH_MAX_AGE_SECONDS of current time, interpreted in FOXPRO_LAUNCH_TIMEZONE)
+   → 400 Bad Request if too old
 
-5. Compute HMAC over the raw normalized return value (do NOT replace before this step):
-   canonical_string = f"{n}|{ln}|{dp}|{t}|{d}|{o}|{nonce}|{return}"
-   expected_sig = hmac.new(FOXPRO_HMAC_SECRET.encode(), canonical_string.encode(), 'sha256').hexdigest()
+6. Compute V2 signature over the raw normalized params:
+   canonical_string = f"MIS2|{n}|{ln}|{dp}|{t}|{o}|{d}|{nonce}|{return}"
+   expected_sig = foxpro_sign_v2(canonical_string, FOXPRO_V2_SECRET)
 
-6. Validate HMAC signature:
-   → If mismatch: log failed FoxproLaunchAttempt (WITHOUT reserving nonce), 400 Bad Request "Invalid signature"
-   → **Important:** Invalid HMAC must NOT reserve the nonce. Nonce reservation happens only after HMAC passes.
+7. Validate V2 signature using secrets.compare_digest:
+   → If mismatch: log failed FoxproLaunchAttempt (WITHOUT reserving nonce), 400 Bad Request
+   → **Important:** Invalid signature must NOT reserve the nonce. Nonce reservation happens only after signature passes.
 
-7. Atomically reserve nonce_hash in FoxproLaunchNonce:
+8. Atomically reserve nonce_hash in FoxproLaunchNonce:
    - Hash the nonce: nonce_hash = hashlib.sha256(nonce.encode()).hexdigest()
    - Attempt to insert nonce_hash with unique constraint
    - If already exists: reject as NONCE_REUSED, log FoxproLaunchAttempt failure, **still create a failed FoxproLaunchAttempt record**, done
    → **Important:** A reused nonce must still create a failed FoxproLaunchAttempt entry for audit purposes, even though the request is rejected.
    - If inserted: nonce is now reserved for this request
-   → 400 Bad Request "Nonce reused" if duplicate
+   → 400 Bad Request if duplicate
 
-8. Validate return path against FOXPRO_ALLOWED_RETURN_PATHS:
+9. Validate return path against FOXPRO_ALLOWED_RETURN_PATHS:
    - Check if `return` matches a named route in the allowlist
-   - If not allowed: redirect to default dashboard (do not substitute in HMAC)
+   - If not allowed: redirect to default dashboard (do not substitute in signature)
    → If invalid, redirect to reverse("project_requests:dashboard")
 
-9. Map short_name to Django User (deterministic order):
-   - Normalize n: strip whitespace, convert to lowercase for matching
-   - First: User.objects.filter(employee_id__iexact=normalized_n, is_active=True).first()
-   - If not found: User.objects.filter(username__iexact=normalized_n, is_active=True).first()
-   → 400 Bad Request "User not found" if no match
-   → Note: `ln` (long name) is NOT used for identity matching; it is display/audit only
+10. Map short_name to Django User (deterministic order):
+    - Normalize n: strip whitespace, convert to lowercase for matching
+    - First: User.objects.filter(employee_id__iexact=normalized_n, is_active=True).first()
+    - If not found: User.objects.filter(username__iexact=normalized_n, is_active=True).first()
+    → 400 Bad Request if no match
+    → Note: `ln` (long name) is NOT used for identity matching; it is display/audit only
 
-10. Validate department code maps to active Department:
+11. Validate department code maps to active Department:
     - Normalize dp: strip whitespace
     - Department.objects.filter(dept_code__iexact=normalized_dp, is_active=True).first()
-    → 400 Bad Request "Department not found" if no match
+    → 400 Bad Request if no match
 
-11. Validate active UserDepartment membership (required for pilot):
+12. Validate active UserDepartment membership (required for pilot):
     - UserDepartment.objects.filter(user=user, department=department, is_active=True).exists()
-    → 400 Bad Request "DEPT_MEMBERSHIP_MISSING" if no active membership
+    → 400 Bad Request if no active membership
     → This is a STRICT pilot requirement; all launched users must have active UserDepartment
 
-12. Check FoxPro `o` vs Django access_level (audit only):
+13. Check FoxPro `o` vs Django access_level (audit only):
     - Compare FoxPro `o` with UserDepartment.access_level
     - If mismatch: Log WARNING (do NOT update Django permissions, do NOT inform user)
     - FoxPro `o` must NEVER create, update, or determine Django authorization
 
-13. Create Django session with login():
+14. Create Django session with login():
     - login(request, user)
     - Set session expiry to reasonable timeout
 
-14. Record FoxproLaunchAttempt:
+15. Record FoxproLaunchAttempt:
     - success=True, signature_valid=True, timestamp_valid=True, user=user
-    - Link to FoxproLaunchNonce record (the one reserved in step 7)
+    - Link to FoxproLaunchNonce record (the one reserved in step 8)
 
-15. Redirect via reverse():
+16. Redirect via reverse():
     - Use reverse() to resolve the named route to actual path
     - External path depends on URL configuration
 ```
@@ -541,10 +561,12 @@ On any failure:
 |------|---------|
 | `IP_BLOCKED` | Source IP not in allowlist |
 | `MISSING_PARAMS` | Required parameter missing |
+| `INVALID_VERSION` | Version `v` is not "2" |
 | `INVALID_TIMESTAMP_FORMAT` | `d` parameter malformed |
 | `TIMESTAMP_EXPIRED` | Timestamp too old |
+| `INVALID_SIGNATURE` | V2 signature mismatch |
 | `NONCE_REUSED` | Nonce already seen |
-| `INVALID_SIGNATURE` | HMAC signature mismatch |
+| `UNSUPPORTED_SIGNATURE_MODE` | `FOXPRO_SIGNATURE_MODE` is not `legacy_v2` |
 | `USER_NOT_FOUND` | No Django user matches `n` (tried employee_id then username) |
 | `USER_INACTIVE` | User exists but `is_active=False` |
 | `DEPT_NOT_FOUND` | Department code `dp` does not map to an active Department |
@@ -684,8 +706,8 @@ FoxPro `o` is never consulted
 |---------|-------------|----------------|
 | **HTTPS** | Required for all launch URLs | Enforce in deployment; redirect HTTP to HTTPS |
 | **IP Allowlist** | Restrict to FoxPro server IPs | `FOXPRO_ALLOWED_IPS` setting + middleware check |
-| **HMAC Shared Secret** | 32+ byte random secret | Environment variable; not in source code |
-| **Timestamp Max Age** | 120 seconds | Validation in view; reject if `d` too old |
+| **V2 Shared Secret** | 32+ byte random secret | Environment variable; not in source code |
+| **Timestamp Max Age** | 15 seconds | Validation in view; reject if `d` too old |
 | **Nonce Replay Protection** | Nonce must be unique | Store `nonce_hash` in `FoxproLaunchNonce` with unique constraint; `FoxproLaunchAttempt` records every attempt and links to nonce reservation |
 | **Audit Logging** | All attempts logged | `FoxproLaunchAttempt` record for every request |
 | **Rate Limiting** | Prevent brute force | Limit launch attempts per IP (e.g., 10/minute) |
@@ -746,14 +768,14 @@ def rate_limit_by_ip(request, limit=10, window=60):
 
 ## 9. Legacy Fallback Plan
 
-**This section describes a temporary fallback only if HMAC/helper/broker is not feasible. This is NOT recommended for long-term use.**
+**This section describes a temporary fallback only if V2 signature is not feasible. This is NOT recommended for long-term use.**
 
 ### 9.1 When to Use This Fallback
 
-- User confirms FoxPro 5 cannot implement HMAC in any form
+- User confirms FoxPro 5 cannot implement V2 signature in any form
 - Helper EXE/DLL cannot be deployed
 - Internal broker cannot be stood up
-- A quick pilot is needed before proper HMAC solution is ready
+- A quick pilot is needed before proper V2 signature solution is ready
 
 ### 9.2 Legacy Fallback Design
 
@@ -790,8 +812,8 @@ def rate_limit_by_ip(request, limit=10, window=60):
 | Milestone | Deadline |
 |-----------|----------|
 | Legacy fallback deployed for pilot | Pilot start |
-| Pilot completes HMAC migration | Pilot end (target: 30 days) |
-| Legacy fallback disabled | After pilot + HMAC migration |
+| Pilot completes V2 signature migration | Pilot end (target: 30 days) |
+| Legacy fallback disabled | After pilot + V2 signature migration |
 
 **The legacy fallback is a temporary bridge, not a long-term solution.**
 
@@ -806,7 +828,7 @@ def rate_limit_by_ip(request, limit=10, window=60):
 - Design `FoxproLaunchAttempt` model schema
 - Design validation flow
 - Design security controls
-- Design HMAC helper options
+- Design V2 signature approach
 
 **Forbidden work:**
 - Implementing any code
@@ -825,20 +847,20 @@ def rate_limit_by_ip(request, limit=10, window=60):
 
 ### Phase 4E-2: FoxPro 5 Capability Spike
 
-**Objective:** Determine FoxPro 5's ability to implement HMAC and select an approach.
+**Objective:** Determine FoxPro 5's ability to implement custom V2 signature and select an approach.
 
 **Actions:**
-- User confirms FoxPro 5 implementation approach (helper, broker, or direct HMAC)
-- Evaluate Option A (direct HMAC), Option B (helper EXE/DLL), Option C (broker)
-- Select approach and document the FoxPro 5 changes required
+- User confirms FoxPro 5 implementation approach (direct V2 signature computation)
+- Evaluate if FoxPro 5 can compute custom V2 signature directly
+- Document the FoxPro 5 changes required
 
 **Decisions to document:**
-- Will FoxPro 5 compute HMAC directly, call a helper, or use broker?
+- Can FoxPro 5 compute custom V2 signature directly?
 - What is the shared secret delivery mechanism?
 - What is the FoxPro 5 deployment timeline?
 
 **Exit criteria:**
-- User confirms HMAC approach for FoxPro 5
+- User confirms V2 signature approach for FoxPro 5
 - FoxPro-side change requirements are documented
 - Shared secret is generated and secured
 
@@ -850,7 +872,7 @@ def rate_limit_by_ip(request, limit=10, window=60):
 - Create `external_auth/` Django app
 - Create `FoxproLaunchAttempt` model
 - Create `FoxproLaunchNonce` model (for nonce reservation/replay prevention)
-- Add `FOXPRO_HMAC_SECRET`, `FOXPRO_ALLOWED_IPS`, etc. to settings
+- Add `FOXPRO_V2_SECRET`, `FOXPRO_ALLOWED_IPS`, etc. to settings
 - Create migration
 
 **Forbidden work:**
@@ -876,7 +898,7 @@ def rate_limit_by_ip(request, limit=10, window=60):
 
 **Allowed work:**
 - Implement `foxpro_launch` view
-- Implement HMAC validation
+- Implement V2 signature validation
 - Implement validation flow (IP, timestamp, nonce, return URL)
 - Implement user mapping
 - Implement audit logging
@@ -908,7 +930,7 @@ def rate_limit_by_ip(request, limit=10, window=60):
 
 **Exit criteria:**
 - All tests pass
-- HMAC validation is secure
+- V2 signature validation is secure
 - Audit logging is complete
 
 ---
@@ -956,9 +978,9 @@ def rate_limit_by_ip(request, limit=10, window=60):
 
 | Test | Description | Expected Result |
 |------|-------------|-----------------|
-| `test_valid_signed_launch` | Valid HMAC, valid user, valid timestamp | User logged in, redirect to dashboard |
-| `test_invalid_signature` | Wrong HMAC sig | 400 Bad Request, `failure_reason=INVALID_SIGNATURE` |
-| `test_expired_timestamp` | Timestamp > 120 seconds old | 400 Bad Request, `failure_reason=TIMESTAMP_EXPIRED` |
+| `test_valid_signed_launch` | Valid V2 signature, valid user, valid timestamp | User logged in, redirect to dashboard |
+| `test_invalid_signature` | Wrong V2 sig | 400 Bad Request, `failure_reason=INVALID_SIGNATURE` |
+| `test_expired_timestamp` | Timestamp > 15 seconds old | 400 Bad Request, `failure_reason=TIMESTAMP_EXPIRED` |
 | `test_reused_nonce` | Nonce already in `FoxproLaunchNonce` | 400 Bad Request, `failure_reason=NONCE_REUSED` |
 | `test_unknown_user` | `n` matches no Django user | 400 Bad Request, `failure_reason=USER_NOT_FOUND` |
 | `test_inactive_user` | User exists but `is_active=False` | 400 Bad Request, `failure_reason=USER_INACTIVE` |
@@ -987,8 +1009,7 @@ from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from accounts.models import Department, UserDepartment
-import hmac
-import hashlib
+from external_auth.signature import foxpro_sign_v2
 import time
 
 User = get_user_model()
@@ -1010,10 +1031,11 @@ class FoxproLaunchTestCase(TestCase):
             access_level='2',
             is_active=True
         )
-        self.secret = 'test-secret-key-for-hmac-32bytes!'
+        self.secret = 'test-v2-secret-key-32bytes-long!!'
     
     def _make_signed_url(self, overrides=None):
         params = {
+            'v': '2',  # Required: v=2 only for pilot
             'n': 'jsmith',
             'ln': 'John Smith',
             'dp': 'ACCT',
@@ -1025,13 +1047,14 @@ class FoxproLaunchTestCase(TestCase):
         }
         params.update(overrides or {})
         
-        sig_string = f"{params['n']}|{params['ln']}|{params['dp']}|{params['t']}|{params['d']}|{params['o']}|{params['nonce']}|{params['return']}"
-        sig = hmac.new(self.secret.encode(), sig_string.encode(), hashlib.sha256).hexdigest()
+        # V2 canonical string format: MIS2|n|ln|dp|t|o|d|nonce|return
+        canonical = f"MIS2|{params['n']}|{params['ln']}|{params['dp']}|{params['t']}|{params['o']}|{params['d']}|{params['nonce']}|{params['return']}"
+        sig = foxpro_sign_v2(canonical, self.secret)
         params['sig'] = sig
         
         return '/auth/foxpro-launch/?' + '&'.join(f'{k}={v}' for k, v in params.items())
     
-    @override_settings(FOXPRO_HMAC_SECRET='test-secret-key-for-hmac-32bytes!')
+    @override_settings(FOXPRO_V2_SECRET='test-v2-secret-key-32bytes-long!!')
     def test_valid_signed_launch(self):
         url = self._make_signed_url()
         response = self.client.get(url)
@@ -1046,7 +1069,7 @@ class FoxproLaunchTestCase(TestCase):
         self.assertIsNotNone(attempt)
         self.assertTrue(attempt.success)
 
-    @override_settings(FOXPRO_HMAC_SECRET='test-secret-key-for-hmac-32bytes!')
+    @override_settings(FOXPRO_V2_SECRET='test-v2-secret-key-32bytes-long!!')
     def test_employee_id_match_first(self):
         """User should be matched by employee_id first, before username."""
         # jsmith has employee_id='E001'
@@ -1055,7 +1078,7 @@ class FoxproLaunchTestCase(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse('project_requests:dashboard'))
 
-    @override_settings(FOXPRO_HMAC_SECRET='test-secret-key-for-hmac-32bytes!')
+    @override_settings(FOXPRO_V2_SECRET='test-v2-secret-key-32bytes-long!!')
     def test_username_fallback(self):
         """If employee_id doesn't match, fall back to username match."""
         # Create user with no employee_id
@@ -1083,61 +1106,69 @@ class FoxproLaunchTestCase(TestCase):
 
 1. **Approve this Phase 4E plan** — confirms the architecture
 2. **Conduct Phase 4E-2 spike** — user confirms FoxPro 5 implementation approach
-3. **If HMAC feasible** (via helper or broker):
+3. **If V2 signature feasible** (FoxPro 5 can compute custom V2 signature):
    - Proceed to Phase 4F-1: Create `external_auth` app and model
    - Proceed to Phase 4F-2: Implement signed launch validation view
-   - User implements FoxPro 5 side with signed URL generation
+   - User implements FoxPro 5 side with V2 signature generation
    - Conduct Phase 4F-3: End-to-end integration test
-4. **If HMAC not feasible for pilot**:
+4. **If V2 signature not feasible for pilot**:
    - Implement Phase 4F-4: Legacy fallback (temporary, with sunset)
-   - Plan migration to HMAC after pilot
+   - Plan migration to V2 signature after pilot
 
 ### 12.2 Decisions Needed
 
 | Decision | Options | Impact | Status |
 |----------|---------|--------|--------|
-| HMAC approach | **Helper EXE/DLL recommended** (for central terminal/server) | Determines Phase 4F implementation path | **Recommended** |
+| Signature approach | **Custom V2 signature** (FoxPro-compatible) | Phase 4F uses custom V2 algorithm, NOT HMAC-SHA256 | **Approved** |
 | User mapping key | `employee_id` first, fallback to `username` | Affects user lookup in view | **Approved** |
 | Department strictness | **Strict (active UserDepartment required)** | Pilot rule | **Approved** |
-| Deployment topology | **Central terminal/server** (helper EXE/DLL preferred) | IP allowlist uses static server IP | **Approved** |
+| Deployment topology | **Network-share EXE on local workstations** (current pilot) | IP allowlist may use internal subnet or be empty | **Approved** |
+| Central terminal/server | **Future alternative only** (NOT current pilot) | Helper EXE/DLL on central server remains as future alternative | **Future alternative** |
 | External dashboard path | Named route `project_requests:dashboard` (resolved via `reverse()`) | Return URL allowlist | **Approved** |
-| Legacy fallback | Approved (with sunset) or not approved | Whether Phase 4F-4 is in scope | **Pending** |
+| Legacy fallback | Not approved for pilot | Phase 4F-4 not in scope | **Not approved** |
 
 ### 12.3 Decisions Confirmed
 
-- [x] **Deployment topology**: Central terminal/server (helper EXE/DLL preferred over broker)
-- [ ] How should the helper EXE/DLL secret be protected (config file, environment, embedded)?
-- [ ] What is the timeline for FoxPro-side implementation?
+- [x] **Deployment topology**: Network-share EXE on local workstations (current pilot)
+- [x] **Central terminal/server**: Revoked as current pilot — remains as future alternative only
+- [x] **Signature algorithm**: Custom V2 signature (NOT HMAC-SHA256)
+- [x] **Secret setting**: `FOXPRO_V2_SECRET` (NOT `FOXPRO_HMAC_SECRET`)
 - [ ] What internal subnet/IP range should be allowed for the IP allowlist?
-- [ ] Shared secret generation
+- [ ] Shared secret generation (for `FOXPRO_V2_SECRET`)
 
 ### 12.4 Phase 4F Readiness
 
-**Phase 4F is NOT ready to begin until Phase 4E docs are synchronized and approved, plus the following prerequisites are explicit:**
+**Phase 4F implementation is complete. Pilot/go-live is NOT approved until the following readiness checklist is verified:**
 
-#### Prerequisites Before Phase 4F
+#### Pilot Readiness Checklist
 
-| Prerequisite | Status | Notes |
-|-------------|--------|-------|
-| Phase 4E plan approved | Pending | This document must pass sync cleanup review |
-| Helper EXE/DLL secret protection choice | **Required** | Config file, environment variable, or embedded — must be decided |
-| Shared secret generated and stored | **Required** | Secret must be generated and stored in protected location |
-| Terminal server static IP / allowlist value | **Required** | Pilot IP must be a specific static IP or small subnet, not broad private range |
-| Timestamp convention selected | **Required** | UTC or terminal-server-local — must be consistent between FoxPro and Django |
-| Helper I/O contract finalized | **Required** | How FoxPro passes params to helper, how helper returns HMAC/signature |
-| Legacy fallback approval/sunset | Optional | Only if legacy fallback (Phase 4F-4) is explicitly approved later |
+| # | Item | Verification |
+|---|------|--------------|
+| 1 | `python manage.py check` passes | Run command; no errors |
+| 2 | `python manage.py makemigrations --check --dry-run` passes | Run command; no changes detected |
+| 3 | `python manage.py test external_auth -v 2` passes | Run command; all tests pass |
+| 4 | User manually runs full test suite | Run `python manage.py test`; all pass |
+| 5 | Migration reviewed/applied | Review migration file; apply if clean |
+| 6 | `FOXPRO_V2_SECRET` is set to real secret and matches FoxPro `MisSecretV2()` | Verify setting and FoxPro code match |
+| 7 | `FOXPRO_ALLOWED_IPS` configured for actual workstation/NAT/proxy source IPs | Verify IP allowlist matches deployment |
+| 8 | `FOXPRO_LAUNCH_TIMEZONE` confirmed | Verify timezone matches workstation config |
+| 9 | FoxPro v=2 URL generation updated | Verify FoxPro code uses v=2 and correct signing |
+| 10 | End-to-end FoxPro → Django dashboard launch succeeds | Manual test from FoxPro to dashboard |
 
 #### Already Approved for Phase 4F
 
-- [x] **HMAC approach is approved for pilot** — helper EXE/DLL on central terminal/server
+- [x] **Custom V2 signature is approved for pilot** — NOT HMAC-SHA256; custom FoxPro-compatible V2 algorithm
 - [x] **User mapping key is confirmed** — `employee_id` first, fallback to `username` (case-insensitive, trimmed)
 - [x] **Department strictness rule is approved** — active `UserDepartment` required for pilot
-- [x] **Deployment topology is approved** — central terminal/server (helper EXE/DLL preferred)
+- [x] **Deployment topology is approved** — network-share EXE on local workstations (NOT central terminal/server)
+- [x] **Central terminal/server is revoked** — helper EXE/DLL on central server remains as future alternative only
 - [x] **External dashboard return path is approved** — named route `project_requests:dashboard` resolved via `reverse()`
-- [x] **FoxPro launch URL contract is approved** — signing string format: `n|ln|dp|t|d|o|nonce|return`
+- [x] **FoxPro launch URL contract is approved** — signing string format: `MIS2|n|ln|dp|t|o|d|nonce|return`
 - [x] **FoxPro `o` is audit-only** — never used for Django authorization
 - [x] **No auto-create users in pilot** — user must pre-exist with active UserDepartment
 - [x] **return uses named route allowlist** — `project_requests:dashboard`, `project_requests:index` for pilot
+- [x] **v=2 only** — no v1 fallback in pilot
+- [x] **No token exchange** — no LaunchSession, no /auth/launch-token/, no /auth/launch/
 
 **Department strictness is approved for pilot:**
 - Active `Department` with matching `dept_code` is required
@@ -1159,20 +1190,12 @@ class FoxproLaunchTestCase(TestCase):
 ```mermaid
 sequenceDiagram
     participant FP as FoxPro
-    participant Helper as HMAC Helper (optional)
     participant DJ as Django /auth/foxpro-launch/
     participant DB as Database
     participant Dash as Dashboard
 
-    FP->>FP: Build params n|ln|dp|t|d|o|nonce|return
-    alt Option B: Helper EXE/DLL
-        FP->>Helper: Compute HMAC-SHA256(signing_string, secret)
-        Helper-->>FP: signature
-    end
-    alt Option C: Broker Service
-        FP->>Broker: POST /generate-signed-url
-        Broker-->>FP: signed URL
-    end
+    FP->>FP: Build params MIS2|n|ln|dp|t|o|d|nonce|return
+    FP->>FP: Compute V2 signature (format: V2-{h1:010d}-{h2:010d}-{h3:010d})
     
     FP->>DJ: GET /auth/foxpro-launch/?n=...&sig=...
     
@@ -1180,7 +1203,7 @@ sequenceDiagram
     DJ->>DJ: 2. Validate required params
     DJ->>DJ: 3. Validate timestamp format
     DJ->>DJ: 4. Validate timestamp age
-    DJ->>DJ: 5. Validate HMAC signature
+    DJ->>DJ: 5. Validate V2 signature
     DJ->>DJ: 6. Reserve nonce (atomic insert)
     DJ->>DJ: 7. Validate return named route
     DJ->>DJ: 8. Map short_name to User

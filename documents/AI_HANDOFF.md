@@ -40,7 +40,7 @@ The legacy PHP code is **read-only reference material**. Do not modify files in 
 |-----|---------|
 | `accounts` | Custom user model, department, and department-scoped role helpers |
 | `project_requests` | Project request lifecycle (draft → submit → approve → assign → complete) |
-| `external_auth` | **Planned** — FoxPro/external auth bridge (not yet implemented) |
+| `external_auth` | FoxPro/external auth bridge — **implemented** (Phase 4F complete; pilot readiness pending) |
 
 ---
 
@@ -73,7 +73,7 @@ The legacy PHP code is **read-only reference material**. Do not modify files in 
 | **Phase 4C** | UI polish and usability hardening — deferred |
 | **Phase 4D** | Legacy migration assessment — deferred |
 | **Phase 4E** | FoxPro/external auth architecture planning — documentation sync in progress, not yet approved |
-| **Phase 4F** | FoxPro/external auth implementation — blocked until Phase 4E approved + prerequisites explicit |
+| **Phase 4F** | FoxPro/external auth implementation — **complete; pilot readiness pending** |
 
 ---
 
@@ -84,7 +84,7 @@ The legacy PHP code is **read-only reference material**. Do not modify files in 
 - **Phase 4B Dashboard implementation: COMPLETE.** User manually ran full test suite and confirmed it passed.
 - **Current active task: Final Phase 4E documentation synchronization cleanup only.** This is the only work being done. No code/templates/URLs/migrations are being modified.
 - **Phase 4E architecture draft exists** in `documents/FOXPRO_AUTH_PLAN.md` using the Signed Launch URL pattern, but is not approved until this sync cleanup review passes.
-- **Phase 4F must not begin.** Implementation is blocked until Phase 4E docs are synchronized/approved and prerequisites are explicit.
+- **Phase 4F implementation is complete; pilot readiness pending.** external_auth app exists with V2 signature validation. Pilot/go-live is NOT approved until verification steps are completed.
 - Phase 4C and Phase 4D remain deferred.
 - Independent minimax-m2.7 Phase 2B review returned **PASS**.
 - minimax-m2.7 Phase 3A, 3B, 3C, 3D-1 implementations were **successful**.
@@ -128,16 +128,19 @@ These items were identified during Phase 3D-5A review but are NOT blockers. They
 
 **Phase 4C and Phase 4D remain deferred.** Do not begin Phase 4C or Phase 4D implementation until explicitly approved.
 
-**Phase 4F is BLOCKED.** Do not begin Phase 4F implementation until:
-1. Phase 4E docs are synchronized and approved
-2. Phase 4F prerequisites are explicit:
-   - Helper EXE/DLL secret protection choice finalized
-   - Shared secret generated and stored
-   - Terminal server static IP / allowlist value confirmed
-   - Timestamp convention selected
-   - Helper I/O contract finalized
+**Phase 4F implementation is complete; pilot readiness pending.** Do not claim pilot/go-live is approved until:
+1. `python manage.py check` passes
+2. `python manage.py makemigrations --check --dry-run` passes
+3. `python manage.py test external_auth -v 2` passes
+4. User manually runs full test suite
+5. Migration is reviewed/applied
+6. `FOXPRO_V2_SECRET` is set to real secret and matches FoxPro `MisSecretV2()`
+7. `FOXPRO_ALLOWED_IPS` is configured for actual workstation/NAT/proxy source IPs
+8. `FOXPRO_LAUNCH_TIMEZONE` is configured
+9. v=2 FoxPro-side URL generation is updated and tested
+10. End-to-end FoxPro → Django dashboard launch succeeds
 
-The approved Phase 4F architecture is Signed Launch URL (not token exchange), implemented in a new `external_auth` app.
+The approved Phase 4F architecture is Signed Launch URL (not token exchange), implemented in the `external_auth` app.
 
 ---
 

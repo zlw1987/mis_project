@@ -346,16 +346,19 @@
 ## Phase 4E — FoxPro External Auth Architecture
 
 - **Decision:** Phase 4E uses Signed Launch URL pattern (not token exchange) for FoxPro 5 compatibility
-- **Architecture:** Signed Launch URL with HMAC-SHA256
+- **Architecture:** Signed Launch URL with **custom FoxPro-compatible V2 signature** (NOT HMAC-SHA256)
   - FoxPro 5 builds normalized launch parameters
-  - FoxPro 5 calls helper EXE/DLL for HMAC computation (shared secret never passed via command-line)
-  - FoxPro 5 uses SHELLEXEC to open HMAC-signed URL
+  - FoxPro 5 computes custom V2 signature directly (format: `V2-{h1:010d}-{h2:010d}-{h3:010d}`)
+  - FoxPro 5 uses SHELLEXEC to open V2-signed URL
   - Django validates at `GET /auth/foxpro-launch/` in one request
   - Django creates session and redirects via `reverse()` to named route
+- **Secret setting:** `FOXPRO_V2_SECRET` (NOT `FOXPRO_HMAC_SECRET`)
+- **Canonical string format:** `MIS2|n|ln|dp|t|o|d|nonce|return`
+- **v=2 only:** No v1 fallback in pilot
 - **App boundary:** New `external_auth` Django app (separate from `accounts` and `project_requests`)
 - **Primary models:** `FoxproLaunchAttempt` + `FoxproLaunchNonce` only (NOT `LaunchSession`)
   - `FoxproLaunchAttempt` — all launch attempts logged (success and failure)
-  - `FoxproLaunchNonce` — nonce reservation for replay prevention (atomically reserved after HMAC passes)
+  - `FoxproLaunchNonce` — nonce reservation for replay prevention (atomically reserved after V2 signature passes)
 - **FoxPro `o` is audit-only:** Never used for Django authorization. Django permissions come from `accounts.User` / `Department` / `UserDepartment` only.
 - **User mapping:** `employee_id` first, fallback `username`; case-insensitive, whitespace trimmed; no auto-create users in pilot
 - **Return URL:** Named route allowlist + `reverse()`. `admin:index` NOT part of pilot. Do not hard-code external paths.
@@ -363,9 +366,9 @@
   1. IP allowlist
   2. Required params
   3. Timestamp format / age
-  4. HMAC over raw normalized values including return
-  5. Invalid HMAC must NOT reserve nonce
-  6. After HMAC passes, atomically reserve nonce_hash in FoxproLaunchNonce
+  4. V2 signature over raw normalized values including return
+  5. Invalid V2 signature must NOT reserve nonce
+  6. After V2 signature passes, atomically reserve nonce_hash in FoxproLaunchNonce
   7. Reused nonce must still create failed FoxproLaunchAttempt
   8. Validate return named route allowlist
   9. Map user
@@ -375,17 +378,17 @@
   13. Audit log
   14. Redirect via reverse()
 - **Pilot prerequisites (required before Phase 4F):**
-  1. Helper EXE/DLL secret protection choice finalized (config file / env / embedded)
-  2. Shared secret generated and stored
-  3. Terminal server static IP / allowlist value confirmed
-  4. Timestamp convention selected (UTC or terminal-server-local)
-  5. Helper I/O contract finalized
-  6. Legacy fallback approval/sunset (if needed)
-- **Deployment topology:** Central terminal/server with helper EXE/DLL (Option B). FoxPro runs on shared server, not each workstation.
+  1. Shared secret generated and stored (for `FOXPRO_V2_SECRET`)
+  2. IP allowlist range confirmed (internal subnet or empty for internal network)
+  3. Timestamp convention selected (UTC or local workstation time)
+  4. Legacy fallback NOT approved for pilot
+- **Deployment topology:** **Network-share EXE on local workstations** (current pilot). FoxPro runs on each user's local workstation, EXE deployed via network share.
+- **Central terminal/server assumption revoked:** After deployment clarification, the central terminal/server with helper EXE/DLL is now a **future alternative only**, NOT current pilot.
 - **User-facing errors:** Must be generic ("Unable to launch. Please contact IT support."). Internal audit `failure_reason` keeps detailed codes.
-- **Legacy fallback:** Only if explicitly approved with sunset. NOT approved for pilot.
+- **Legacy fallback:** NOT approved for pilot.
 - **Rejected alternatives:**
   - Token exchange (`LaunchSession`, `/auth/launch-token/`, `/auth/launch/`) — requires JSON parsing in FoxPro 5
-  - Direct HMAC in FoxPro 5 — FoxPro 5 unlikely to support native HMAC
-  - Broad IP allowlist for pilot — terminal server static IP only
+  - HMAC-SHA256 — FoxPro 5 cannot compute HMAC natively; remains as future alternative only
+  - Central terminal/server with helper EXE/DLL — revoked as current pilot; remains as future alternative only
+  - v1 fallback — not implemented in pilot
 - **Phase:** Phase 4E (documentation sync in progress, not yet approved)
