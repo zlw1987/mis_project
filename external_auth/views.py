@@ -216,18 +216,18 @@ class FoxProLaunchView(View):
         
         # Step 10 & 11: Atomically reserve nonce
         nonce_reservation = None
-        from django.db import transaction
+        from django.db import transaction, IntegrityError
         try:
             with transaction.atomic():
                 nonce_reservation = FoxproLaunchNonce.objects.create(
                     nonce_hash=nonce_hash,
                     source_ip=source_ip,
                 )
-        except Exception:
+        except IntegrityError:
             # Nonce already exists (unique constraint violation)
             logger.warning(f"FoxPro launch failed - nonce reused: {nonce_hash[:12]}...")
             create_failed_attempt(FoxproLaunchAttempt.FailureReason.NONCE_REUSED,
-                                 signature_valid=True, timestamp_valid=True)
+                                  signature_valid=True, timestamp_valid=True)
             return render_error_response(request)
         
         # Step 12: If we get here, nonce is reserved (signature was valid)

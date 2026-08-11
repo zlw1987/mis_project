@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, OperationalError
 from django.test import TestCase, override_settings, RequestFactory
 from django.urls import reverse
 
@@ -599,11 +600,74 @@ class FoxProNonceReplayTestCase(TestCase):
         )
         
         # Second attempt to reserve same nonce should fail
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             FoxproLaunchNonce.objects.create(
                 nonce_hash=nonce_hash,
                 source_ip='127.0.0.2',
             )
+
+    @override_settings(
+        FOXPRO_V2_SECRET='test-secret-key-for-foxpro-v2',
+        FOXPRO_LAUNCH_MAX_AGE_SECONDS=15,
+        FOXPRO_ALLOWED_IPS=[],
+        FOXPRO_ALLOWED_RETURN_PATHS=['project_requests:dashboard'],
+    )
+    def test_operational_error_during_nonce_reservation_propagates(self):
+        """Test that OperationalError during nonce reservation is NOT misclassified as NONCE_REUSED.
+
+        This is a regression test for the defect where any exception during nonce creation
+        was incorrectly classified as NONCE_REUSED. OperationalError and other unexpected
+        database errors should propagate normally rather than being converted to a 400.
+
+        We verify:
+        - OperationalError propagates from the view instead of being swallowed
+        - No FoxproLaunchAttempt with failure_reason=NONCE_REUSED is created
+        - The user is not authenticated (_auth_user_id must not exist in session)
+        """
+        # Generate valid params with a fresh nonce using the existing fixture data
+        import pytz
+        la_tz = pytz.timezone('America/Los_Angeles')
+        timestamp = datetime.now(la_tz).strftime('%Y%m%d%H%M%S')
+        nonce = 'op-error-test-nonce-12345678901234567890'
+        params = {
+            'v': '2',
+            'n': 'jsmith',
+            'ln': 'John Smith',
+            'dp': 'ACCT',
+            't': 'Test',
+            'o': 'STAFF',
+            'd': timestamp,
+            'nonce': nonce,
+            'return': 'project_requests:dashboard',
+        }
+
+        from external_auth.signature import foxpro_canonical_v2, foxpro_sign_v2
+        canonical = foxpro_canonical_v2(params)
+        params['sig'] = foxpro_sign_v2(canonical, 'test-secret-key-for-foxpro-v2')
+
+        query = '&'.join(f'{k}={v}' for k, v in params.items())
+        url = f'/auth/foxpro-launch/?{query}'
+
+        # Patch FoxproLaunchNonce.objects.create to raise OperationalError
+        # This simulates a database connection failure during nonce reservation
+        with patch('external_auth.views.FoxproLaunchNonce.objects.create') as mock_create:
+            mock_create.side_effect = OperationalError("simulated database failure")
+
+            # OperationalError propagates from the view (not caught as NONCE_REUSED)
+            with self.assertRaises(OperationalError):
+                self.client.get(url)
+
+            # Verify the mock was called exactly once, proving the request reached nonce reservation
+            mock_create.assert_called_once()
+
+        # No NONCE_REUSED attempt should be created (operation rolled back)
+        nonce_attempts = FoxproLaunchAttempt.objects.filter(
+            failure_reason='NONCE_REUSED'
+        ).count()
+        self.assertEqual(nonce_attempts, 0)
+
+        # User should NOT be authenticated
+        self.assertNotIn('_auth_user_id', self.client.session)
 
 
 @override_settings(
