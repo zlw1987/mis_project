@@ -111,7 +111,7 @@ GET /auth/foxpro-launch/
 The signing string is the pipe-delimited concatenation of all parameters in a **fixed order**:
 
 ```
-n|ln|dp|t|d|o|nonce|return
+MIS2|n|ln|dp|t|o|d|nonce|return
 ```
 
 **Note:** The `sig` parameter is NOT included in the signing string. It is the output.
@@ -136,7 +136,7 @@ return=project_requests:dashboard
 
 Normalized (trimmed) signing string:
 ```
-john.smith|John Smith|ACCT|Sr. Accountant|20260527192015|2|a7f3c8d2e9b4f1a6c0d5e8f2b3a7c1d4|project_requests:dashboard
+MIS2|john.smith|John Smith|ACCT|Sr. Accountant|2|20260527192015|a7f3c8d2e9b4f1a6c0d5e8f2b3a7c1d4|project_requests:dashboard
 ```
 
 Django resolves `return=project_requests:dashboard` to actual path (e.g., `/project_requests/dashboard/`) at redirect time using `reverse()`.
@@ -178,7 +178,7 @@ FoxPro 5 does not have built-in HMAC-SHA256, JSON parsing, or modern HTTPS clien
 |--------|------------|
 | FoxPro change required | Medium — FoxPro 5 computes V2 signature directly |
 | Django change required | None (validate V2 signature) |
-| Security level | High |
+| Security level | Custom / non-standard; no standard MAC or formal cryptographic assurance established; acceptable for scoped internal pilot with compensating controls |
 | Implementation complexity | Medium (FoxPro side) |
 | Recommendation | **Current pilot approach** |
 
@@ -190,7 +190,7 @@ FoxPro 5 calls a small compiled helper (EXE or DLL) that computes the V2 signatu
 |--------|------------|
 | FoxPro change required | Medium — FoxPro 5 calls helper via RUN command |
 | Django change required | None |
-| Security level | High |
+| Security level | Custom / non-standard; no standard MAC or formal cryptographic assurance established; acceptable for scoped internal pilot with compensating controls |
 | Implementation complexity | Medium (helper development) |
 | Recommendation | **Future alternative only** — NOT current pilot |
 
@@ -215,7 +215,7 @@ FoxPro 5 calls an internal broker/middleware service via HTTPS. The broker compu
 |--------|------------|
 | FoxPro change required | Medium — FoxPro 5 calls broker with employee info via HTTP GET |
 | Django change required | None (standard V2 signature validation) |
-| Security level | High |
+| Security level | Custom / non-standard; no standard MAC or formal cryptographic assurance established; acceptable for scoped internal pilot with compensating controls |
 | Implementation complexity | Medium-High (broker service) |
 | Recommendation | **Future alternative only** — NOT current pilot |
 
@@ -1179,7 +1179,7 @@ class FoxproLaunchTestCase(TestCase):
 
 - [x] **Documentation only** — No Python code, templates, URLs, migrations, or legacy_php modifications
 - [x] **`documents/FOXPRO_AUTH_PLAN.md` created** — Comprehensive FoxPro auth architecture plan
-- [x] **No FoxPro auth implementation started** — Phase 4F is deferred
+- [x] **Phase 4F implementation complete — external_auth V2 validation is implemented; pilot readiness verification remains pending.**
 - [x] **No outside workspace files read** — Only files within `c:/dev/mis_project`
 - [x] **`documents/PHASE_4_PLAN.md` already links to FoxPro plan** — No update needed
 
