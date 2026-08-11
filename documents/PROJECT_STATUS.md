@@ -7,7 +7,7 @@
 - **Phase 3 is complete.** All subphases (3A, 3B, 3C, 3D) are done.
 - **Phase 3D-5A final hardening review: PASS.** 116 targeted tests OK. Views are thin wrappers. No business logic duplication. CSRF and POST-only enforced. No blockers.
 - **Phase 4B Dashboard implementation: COMPLETE.** User manually ran full test suite and confirmed it passed.
-- **Final Phase 4E documentation synchronization cleanup is in progress (this task).** external_auth app implementation complete; migration 0002_add_unsupported_signature_mode.py added.
+- **MIS-8 pilot-readiness verification in progress.** external_auth app implementation complete; migration 0002_add_unsupported_signature_mode.py added.
 - **Phase 4C (UI polish) is paused/deferred.** Implementation has not started.
 - **Phase 4F implementation complete; pilot readiness pending.** external_auth app exists with V2 signature validation. Pilot/go-live is NOT approved until verification steps are completed.
 - **Current blockers:** Pilot readiness — see Phase 4F verification steps below.
@@ -15,6 +15,15 @@
 ---
 
 ## Completed Work
+
+- MIS-7:
+  - Security and pilot-readiness review completed.
+  - Result: CONDITIONAL GO for the scoped internal FoxPro V2 pilot.
+  - No authentication algorithm changes were made by MIS-7.
+- MIS-8:
+  - Current follow-up.
+  - Scope: documentation consistency and deployment/pilot-readiness verification.
+  - No V2 algorithm redesign.
 
 - Phase 0 — Django foundation and accounts foundation
 - Phase 0 hardening
@@ -67,7 +76,7 @@ These items were identified during Phase 3D-5A review but are NOT blockers:
 
 ## Current Next Step
 
-**Final Phase 4E documentation synchronization cleanup.** Phase 4B is complete.
+**MIS-8 pilot-readiness verification.** Phase 4B is complete.
 
 Phase 4F implementation is complete; pilot readiness is pending verification:
 
