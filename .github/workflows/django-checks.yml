@@ -41,4 +41,4 @@ jobs:
         run: python manage.py makemigrations --check --dry-run
 
       - name: Run targeted Django tests
-        run: python manage.py test accounts project_requests external_auth --verbosity 2
+        run: python manage.py test accounts project_requests external_auth config.tests_settings_pilot --verbosity 2

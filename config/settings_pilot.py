@@ -141,3 +141,84 @@ if trust_xff_raw is not None:
         )
 else:
     FOXPRO_TRUST_X_FORWARDED_FOR = False
+
+
+# Database configuration for pilot deployment
+# Uses MariaDB on GoDaddy hosting; fail closed if required vars are missing
+#
+# Environment Variables:
+#   MIS_DB_NAME (required): Database name
+#   MIS_DB_USER (required): Database username
+#   MIS_DB_PASSWORD (required): Database password (exact value preserved, never stripped)
+#   MIS_DB_HOST (optional, default: localhost): Database hostname
+#   MIS_DB_PORT (optional, default: 3306): Database port (integer 1-65535)
+
+def get_env_required_trimmed_or_blank(name: str) -> str:
+    """Get required environment variable, preserving blank values for explicit failure."""
+    value = os.environ.get(name)
+    if value is None:
+        raise ImproperlyConfigured(f"Required environment variable {name} is not set")
+    return value
+
+
+def get_env_optional_trimmed(name: str, default: str) -> str:
+    """Get optional environment variable with default and trimming."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value.strip()
+    return default
+
+
+def get_env_required_port(name: str, default: int) -> int:
+    """Get required port environment variable with validation."""
+    value = os.environ.get(name)
+    if value is not None:
+        value = value.strip()
+        if value == "":
+            raise ImproperlyConfigured(f"Required environment variable {name} cannot be blank")
+        try:
+            port = int(value)
+        except ValueError:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} must be a valid integer"
+            )
+        if port < 1 or port > 65535:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} must be between 1 and 65535"
+            )
+        return port
+    return default
+
+
+mis_db_name_raw = get_env_required_trimmed_or_blank("MIS_DB_NAME")
+MIS_DB_NAME = mis_db_name_raw.strip()
+if MIS_DB_NAME == "":
+    raise ImproperlyConfigured("MIS_DB_NAME cannot be blank or empty")
+
+mis_db_user_raw = get_env_required_trimmed_or_blank("MIS_DB_USER")
+MIS_DB_USER = mis_db_user_raw.strip()
+if MIS_DB_USER == "":
+    raise ImproperlyConfigured("MIS_DB_USER cannot be blank or empty")
+
+MIS_DB_PASSWORD = os.environ.get("MIS_DB_PASSWORD")
+if MIS_DB_PASSWORD is None:
+    raise ImproperlyConfigured("Required environment variable MIS_DB_PASSWORD is not set")
+if MIS_DB_PASSWORD == "":
+    raise ImproperlyConfigured("MIS_DB_PASSWORD cannot be empty")
+
+MIS_DB_HOST = get_env_optional_trimmed("MIS_DB_HOST", "localhost")
+if MIS_DB_HOST == "":
+    raise ImproperlyConfigured("MIS_DB_HOST cannot be blank")
+
+MIS_DB_PORT = get_env_required_port("MIS_DB_PORT", 3306)
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': MIS_DB_NAME,
+        'USER': MIS_DB_USER,
+        'PASSWORD': MIS_DB_PASSWORD,
+        'HOST': MIS_DB_HOST,
+        'PORT': MIS_DB_PORT,
+    }
+}
